@@ -4690,7 +4690,7 @@ Components.Window = (function()
 		if Window.Compact then
 			local SEARCH_W = 170 -- độ rộng thanh nhập
 			local BAR_H = 34
-			local GAP = 8 -- khoảng cách giữa thanh nhập và mép ui
+			local GAP = 6 -- khoảng cách giữa thanh nhập và mép ui
 			local PAD = 3 -- chừa viền cho khung cắt để UIStroke không bị cắt
 			local SearchOpen = false
 			local LastClosed = 0

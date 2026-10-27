@@ -4309,6 +4309,8 @@ Components.Window = (function()
 		end
 		Window.Compact = Config.CompactTabs == true
 		Window.TabWidth = Window.Compact and (Config.CompactTabWidth or 44) or Config.TabWidth
+		-- CHỈNH CHIỀU CAO Ô SEARCH Ở ĐÂY (thanh search trượt ra sẽ tự theo): Config.CompactSearchHeight hoặc đổi số 39
+		Window.SearchHeight = Window.Compact and (Config.CompactSearchHeight or 39) or 28
 
 		local Selector = New("Frame", {
 			Size = UDim2.fromOffset(4, 0),
@@ -4580,7 +4582,7 @@ Components.Window = (function()
 		Window.TopOffset = topOffset
 
 		local searchOffset = hasImage and (imageSize + 10 + topOffset) or topOffset
-		local searchHeight = Window.Compact and 39 or 28
+		local searchHeight = Window.SearchHeight
 
 		local tabHolderTop
 		if hasImage then
@@ -4666,14 +4668,14 @@ Components.Window = (function()
 
 		if Window.Compact then
 			local SEARCH_W = 170
-			local BAR_H = 40
+			local BAR_H = searchHeight
 			local GAP = 6
 			local PAD = 3
 			local SearchOpen = false
 			local LastClosed = 0
 			local SlideInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 			SearchIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
-			SearchIcon.Size = UDim2.fromOffset(20, 20)
+			SearchIcon.Size = UDim2.fromOffset(math.floor(searchHeight * 0.5), math.floor(searchHeight * 0.5))
 
 			local SearchClip = New("Frame", {
 				BackgroundTransparency = 1,
@@ -4691,7 +4693,7 @@ Components.Window = (function()
 				},
 			}, {
 				New("UICorner", {
-					CornerRadius = UDim.new(0, 10),
+					CornerRadius = UDim.new(0, 8),
 				}),
 				New("UIStroke", {
 					Thickness = 1,
@@ -4704,7 +4706,7 @@ Components.Window = (function()
 			})
 
 			Library:IconLabel("search", {
-				Size = UDim2.fromOffset(15, 15),
+				Size = UDim2.fromOffset(math.floor(BAR_H * 0.4), math.floor(BAR_H * 0.4)),
 				AnchorPoint = Vector2.new(0, 0.5),
 				Position = UDim2.new(0, 11, 0.5, 0),
 				BackgroundTransparency = 1,
@@ -4723,7 +4725,7 @@ Components.Window = (function()
 			SearchInput.ZIndex = 21
 
 			local ClearButton = New("TextButton", {
-				Size = UDim2.fromOffset(22, 22),
+				Size = UDim2.fromOffset(math.floor(BAR_H * 0.55), math.floor(BAR_H * 0.55)),
 				AnchorPoint = Vector2.new(1, 0.5),
 				Position = UDim2.new(1, -7, 0.5, 0),
 				BackgroundTransparency = 1,
@@ -4838,7 +4840,7 @@ Components.Window = (function()
 		local imageSize = Window.TabWidth - 24
 		local topOffset = Window.TopOffset or 25
 		local imageOffset = hasImage and (imageSize + 10 + topOffset) or topOffset
-		local searchHeight = Window.Compact and 39 or 28
+		local searchHeight = Window.SearchHeight
 		local totalOffset = (Window.ShowSearch and searchHeight or 0) + imageOffset
 
 		local TabFrame = New("Frame", {
@@ -5144,7 +5146,7 @@ Components.Window = (function()
 
 			local searchOffset = Window.HasImage and (Window.ImageSize + Window.TopOffset + 10) or Window.TopOffset
 			local searchTop = searchOffset
-			local searchBottom = searchTop + (Window.Compact and 39 or 28)
+			local searchBottom = searchTop + (Window.SearchHeight)
 
 			if Window.HasImage and Window.ImageSize then
 				local imageBottom = Window.ImageSize + Window.TopOffset + 10
@@ -5353,7 +5355,7 @@ Components.Window = (function()
 			local searchOffset = Window.HasImage and (Window.ImageSize + 10 + topOffset) or topOffset
 			SearchFrame.Position = UDim2.new(0, 0, 0, searchOffset)
 			local imageOffset = Window.HasImage and (Window.ImageSize + 10 + topOffset) or topOffset
-			local searchHeight = Window.Compact and 39 or 28
+			local searchHeight = Window.SearchHeight
 			local totalOffset = (Window.ShowSearch and searchHeight or 0) + imageOffset
 			TabFrame.Size = UDim2.new(0, Window.TabWidth, 1, -(totalOffset + 31))
 
@@ -9751,6 +9753,14 @@ function Library:CreateMinimizer(Config)
 
 
 
+	-- icon dạng ảnh (rbxassetid / số / link) thì cho phủ kín nút + bo góc theo nút
+	local isImageIcon = false
+	if iconAsset == Config.Icon then
+		local I = Config.Icon
+		isImageIcon = type(I) == "number" or type(I) == "table"
+			or (type(I) == "string" and (I:match("^rbxassetid://") ~= nil or I:match("^rbxasset://") ~= nil or I:match("^%d+$") ~= nil or I:match("^https?://") ~= nil))
+	end
+
 	local useAcrylic = (Config.Acrylic == true)
 
 
@@ -9773,6 +9783,12 @@ function Library:CreateMinimizer(Config)
 
 
 	local function createButton(isDesktop)
+		local radius = cornerRadius or (isDesktop and 14 or 12)
+		local iconChildren = { New("UICorner", { CornerRadius = UDim.new(0, isImageIcon and radius or 0) }) }
+		if not isImageIcon then
+			table.insert(iconChildren, New("UIAspectRatioConstraint", { AspectRatio = 1, AspectType = Enum.AspectType.FitWithinMaxSize }))
+		end
+
 
 
 		return New("TextButton", {
@@ -9838,7 +9854,7 @@ function Library:CreateMinimizer(Config)
 				Name = "Icon",
 
 
-				Size = UDim2.new(0.8, 0, 0.8, 0),
+				Size = isImageIcon and UDim2.fromScale(1, 1) or UDim2.new(0.8, 0, 0.8, 0),
 
 
 				Position = UDim2.new(0.5, 0, 0.5, 0),
@@ -9848,27 +9864,12 @@ function Library:CreateMinimizer(Config)
 
 
 				BackgroundTransparency = 1,
+				ImageColor3 = Color3.new(1, 1, 1),
+				ScaleType = isImageIcon and Enum.ScaleType.Crop or Enum.ScaleType.Stretch,
+				ThemeTag = (not isImageIcon) and { ImageColor3 = "Text" } or nil,
 
 
-				ThemeTag = {
-
-
-					ImageColor3 = "Text",
-
-
-				},
-
-
-			}, {
-
-
-				New("UIAspectRatioConstraint", { AspectRatio = 1, AspectType = Enum.AspectType.FitWithinMaxSize }),
-
-
-				New("UICorner", { CornerRadius = UDim.new(0, 0) })
-
-
-			}),
+			}, iconChildren),
 
 
 

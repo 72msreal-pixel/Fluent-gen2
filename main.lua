@@ -40,17 +40,17 @@ local ProtectGui = protectgui or (syn and syn.protect_gui) or function() end
 local Themes = {
 	Names = {
 		"Dark",
-		"Darker", 
+		"Darker",
 		"AMOLED",
 		"Light",
 		"Balloon",
 		"SoftCream",
-		"Aqua", 
+		"Aqua",
 		"Amethyst",
 		"Rose",
 		"Midnight",
 		"Forest",
-		"Sunset", 
+		"Sunset",
 		"Ocean",
 		"Emerald",
 		"Sapphire",
@@ -1706,7 +1706,7 @@ local function setupMiniMessageSupport(object, properties)
 		end
 		
 		if text:match("<[^>]+>") then
-		local hasMiniMessagePattern = 
+		local hasMiniMessagePattern =
 			text:match("<%w+>") or
 			text:match("<color:") or
 			text:match("<#[%x%x%x%x%x%x]>") or
@@ -1856,7 +1856,7 @@ function Library:SafeCallback(Function, ...)
 			Duration = 5,
 		})
 	end
-end--?
+end
 function Library:Round(Number, Factor)
 	if Factor == 0 then
 		return math.floor(Number)
@@ -2498,11 +2498,6 @@ Components.Section = (function()
 		return Enum.HorizontalAlignment.Left
 	end
 
-	-- Config: Title, Icon (đã resolve), Box, FontWeight, TextTransparency,
-	--         TextXAlignment, TextSize, Opened
-	-- Opened = true/false -> section đóng/mở (Box, Desc, mũi tên, chứa được các nút)
-	-- Không có Opened     -> section thường: CHỈ là tiêu đề (icon + chữ), không chứa nút, không đóng/mở, không box
-	--                        (các nút vẫn gắn thẳng vào tab/tab con như bản cũ)
 	return function(Config, Parent)
 		local Section = {}
 		local Title = Config.Title or "Section"
@@ -2517,7 +2512,7 @@ Components.Section = (function()
 		local DESC_H = HasDesc and 16 or 0
 
 		local HEADER_H = (Box and 32 or 25) + DESC_H
-		local EXTRA_W = 0 -- không kéo section vượt khung (tránh tràn viền)
+		local EXTRA_W = 0
 		local BOTTOM_PAD = Box and 8 or 0
 		local SIDE_PAD = Box and 8 or 0
 		local TextSize = Config.TextSize or 17
@@ -2575,7 +2570,6 @@ Components.Section = (function()
 			}),
 		})
 
-		-- Section thường: chỉ có tiêu đề, không Container => không chứa nút
 		if not Collapsible then
 			Section.Root = New("Frame", {
 				BackgroundTransparency = 1,
@@ -2591,11 +2585,9 @@ Components.Section = (function()
 			return Section
 		end
 
-		-- Mũi tên: chevron-down = mở, xoay -90 = đóng
 		local Chevron = Library:IconLabel("chevron-down", {
 			Size = UDim2.fromOffset(16, 16),
 			AnchorPoint = Vector2.new(1, 0.5),
-			-- căn giữa theo chiều dọc của cả header (kể cả khi có desc), sát phải ngang icon của nút
 			Position = UDim2.new(1, -4 - SIDE_PAD, 0, (Box and 16 or 11) + DESC_H / 2),
 			BackgroundTransparency = 1,
 			Rotation = Collapsed and -90 or 0,
@@ -2638,7 +2630,6 @@ Components.Section = (function()
 			Section.Container,
 		}
 
-		-- Box: nền + viền bo góc như WindUI
 		if Box then
 			table.insert(RootChildren, New("UICorner", { CornerRadius = UDim.new(0, 6) }))
 			table.insert(RootChildren, New("UIStroke", {
@@ -2783,7 +2774,7 @@ Components.Tab = (function()
 			Type = "Tab",
 		}
 
-		if not fischbypass then 
+		if not fischbypass then
 			if Library:GetIcon(Icon) then
 				Icon = Library:GetIcon(Icon)
 			end
@@ -2900,7 +2891,6 @@ Components.Tab = (function()
 			Tab.ContainerFrame.CanvasSize = UDim2.new(0, 0, 0, ContainerLayout.AbsoluteContentSize.Y + 2)
 		end)
 
-		-- CompactTabs: icon không có khung nền, chỉ hiện nền khi hover / đang chọn
 		Tab.Rest = CompactTab and 1 or 0.92
 		Tab.HoverT = CompactTab and 0.93 or 0.87
 		Tab.Frame.BackgroundTransparency = Tab.Rest
@@ -2928,9 +2918,6 @@ Components.Tab = (function()
 		Tab.Container = Tab.ContainerFrame
 		Tab.ScrollFrame = Tab.Container
 
-		-- Dùng chung cho Tab:Section và SubTab:Section
-		-- Opened = true/false -> trả về section đóng/mở (chứa được nút)
-		-- không có Opened     -> section thường: chỉ vẽ tiêu đề, trả về chính Owner (tab/tab con) để các nút gắn thẳng vào đó
 		local function BuildSection(Owner, Config)
 			if type(Config) ~= "table" then
 				Config = { Title = tostring(Config) }
@@ -3018,7 +3005,6 @@ Components.Tab = (function()
 					self.SubTabHolder.CanvasSize = UDim2.new(0, SubTabListLayout.AbsoluteContentSize.X, 0, 40)
 				end)
 
-				-- Đường kẻ phân cách dưới hàng tab con
 				New("Frame", {
 					Name = "SubTabDivider",
 					Size = UDim2.new(1, 0, 0, 1),
@@ -3032,7 +3018,7 @@ Components.Tab = (function()
 				})
 
 				local SubTabContainerHolder = New("Frame", {
-					Size = UDim2.new(1, 7, 1, -60), -- phủ hết bề ngang (bù padding 1+6 của tab mẹ) để dùng chung khoảng trống
+					Size = UDim2.new(1, 7, 1, -60),
 					Position = UDim2.fromOffset(-1, 52),
 					BackgroundTransparency = 1,
 					ClipsDescendants = true,
@@ -3043,7 +3029,7 @@ Components.Tab = (function()
 			end
 
 			local SubTabIcon = Icon
-			if not fischbypass then 
+			if not fischbypass then
 				if Library:GetIcon(Icon) then
 					SubTabIcon = Library:GetIcon(Icon)
 				end
@@ -3143,7 +3129,7 @@ Components.Tab = (function()
 					SortOrder = Enum.SortOrder.LayoutOrder,
 				}),
 				New("UIPadding", {
-					PaddingRight = UDim.new(0, 6), -- bằng tab mẹ
+					PaddingRight = UDim.new(0, 6),
 					PaddingLeft = UDim.new(0, 1),
 					PaddingTop = UDim.new(0, 1),
 					PaddingBottom = UDim.new(0, 1),
@@ -3239,7 +3225,7 @@ Components.Tab = (function()
 					Title = SectionTitle,
 					Icon = SectionIcon,
 					Description = SectionDesc,
-					Opened = if StartCollapsed == nil then nil else not StartCollapsed, -- không truyền StartCollapsed -> section thường (chỉ tiêu đề)
+					Opened = if StartCollapsed == nil then nil else not StartCollapsed,
 				})
 			end
 
@@ -3375,7 +3361,7 @@ Components.Tab = (function()
 				Title = SectionTitle,
 				Icon = SectionIcon,
 				Description = SectionDesc,
-				Opened = if StartCollapsed == nil then nil else not StartCollapsed, -- không truyền StartCollapsed -> section thường (chỉ tiêu đề)
+				Opened = if StartCollapsed == nil then nil else not StartCollapsed,
 			})
 		end
 
@@ -4307,8 +4293,6 @@ Components.Window = (function()
 
 		Window.AcrylicPaint = Acrylic.AcrylicPaint()
 
-		-- Kích thước vùng GUI thật (đã trừ thanh topbar của Roblox). Camera.ViewportSize còn tính cả phần này
-		-- nên căn giữa theo nó sẽ bị lệch xuống dưới.
 		local function GetScreenSize()
 			local size = GUI.AbsoluteSize
 			if size.X > 0 and size.Y > 0 then
@@ -4327,7 +4311,6 @@ Components.Window = (function()
 				Window.Root.Position = Window.Position
 			end
 		end
-		-- CompactTabs = true: thanh tab thu gọn chỉ còn icon (search thành nút icon, UserInfo chỉ còn avatar)
 		Window.Compact = Config.CompactTabs == true
 		Window.TabWidth = Window.Compact and (Config.CompactTabWidth or 44) or Config.TabWidth
 
@@ -4688,19 +4671,15 @@ Components.Window = (function()
 		}
 
 		if Window.Compact then
-			local SEARCH_W = 170 -- độ rộng thanh nhập
+			local SEARCH_W = 170
 			local BAR_H = 34
-			local GAP = 6 -- khoảng cách giữa thanh nhập và mép ui
-			local PAD = 3 -- chừa viền cho khung cắt để UIStroke không bị cắt
+			local GAP = 6
+			local PAD = 3
 			local SearchOpen = false
 			local LastClosed = 0
-			local Travel = 0
-			local FollowConn
 			local SlideInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 			SearchIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
 
-			-- Thanh nhập trượt từ mép trái của ui ra BÊN NGOÀI ui (không đè lên ui)
-			-- Khung cắt: từ [mép trái ui - GAP - rộng] đến [mép trái ui]; thanh chạy trong khung này từ phải sang trái
 			local SearchClip = New("Frame", {
 				BackgroundTransparency = 1,
 				ClipsDescendants = true,
@@ -4748,7 +4727,6 @@ Components.Window = (function()
 			SearchInput.TextSize = 14
 			SearchInput.ZIndex = 21
 
-			-- nút xoá nhanh, chỉ hiện khi đang có chữ
 			local ClearButton = New("TextButton", {
 				Size = UDim2.fromOffset(22, 22),
 				AnchorPoint = Vector2.new(1, 0.5),
@@ -4787,14 +4765,6 @@ Components.Window = (function()
 				Parent = SearchFrame,
 			})
 
-			local function PlaceSearchClip()
-				local Origin = GUI.AbsolutePosition
-				SearchClip.Position = UDim2.fromOffset(
-					Window.Root.AbsolutePosition.X - Origin.X - Travel,
-					SearchFrame.AbsolutePosition.Y - Origin.Y + SearchFrame.AbsoluteSize.Y / 2 - (BAR_H + PAD * 2) / 2
-				)
-			end
-
 			local function SetSearchOpen(State)
 				if State == SearchOpen then
 					return
@@ -4805,18 +4775,16 @@ Components.Window = (function()
 
 				if State then
 					local Root = Window.Root
-					local Width = math.clamp(Root.AbsolutePosition.X - GUI.AbsolutePosition.X - GAP - 6, 90, SEARCH_W) -- không tràn ra khỏi màn hình
-					Travel = Width + GAP
-					SearchClip.Parent = GUI
+					local Width = math.clamp(Root.AbsolutePosition.X - GAP - 6, 90, SEARCH_W)
+					local Travel = Width + GAP
+					SearchClip.Parent = Root
 					SearchClip.Size = UDim2.fromOffset(Travel, BAR_H + PAD * 2)
-					-- đặt sát mép trái ui, canh giữa theo icon tìm kiếm (và bám theo khi kéo ui)
-					PlaceSearchClip()
-					if FollowConn then
-						FollowConn:Disconnect()
-					end
-					FollowConn = Root:GetPropertyChangedSignal("AbsolutePosition"):Connect(PlaceSearchClip)
+					SearchClip.Position = UDim2.fromOffset(
+						-Travel,
+						SearchFrame.AbsolutePosition.Y - Root.AbsolutePosition.Y + SearchFrame.AbsoluteSize.Y / 2 - (BAR_H + PAD * 2) / 2
+					)
 					SearchBar.Size = UDim2.new(0, Width, 0, BAR_H)
-					SearchBar.Position = UDim2.fromOffset(Travel, PAD) -- bắt đầu ẩn phía sau mép ui
+					SearchBar.Position = UDim2.fromOffset(Travel, PAD)
 					SearchClip.Visible = true
 					TweenService:Create(SearchBar, SlideInfo, { Position = UDim2.fromOffset(0, PAD) }):Play()
 					SearchInput:CaptureFocus()
@@ -4827,21 +4795,15 @@ Components.Window = (function()
 					Tween.Completed:Connect(function()
 						if not SearchOpen then
 							SearchClip.Visible = false
-							if FollowConn then
-								FollowConn:Disconnect()
-								FollowConn = nil
-							end
 						end
 					end)
 					Tween:Play()
 				end
 			end
 
-			Window.SetSearchOpen = SetSearchOpen
-
 			Creator.AddSignal(SearchButton.MouseButton1Click, function()
 				if os.clock() - LastClosed < 0.25 then
-					return -- vừa tự đóng do mất focus khi bấm vào icon, không mở lại ngay
+					return
 				end
 				if SearchOpen and SearchInput.Text == "" then
 					SetSearchOpen(false)
@@ -5006,37 +4968,12 @@ Components.Window = (function()
 		table.insert(rootChildren, TabFrame)
 		table.insert(rootChildren, ResizeStartFrame)
 
-		-- CanvasGroup để có thể làm mờ dần cả ui bằng GroupTransparency (ẩn/hiện mượt)
-		Window.Root = New("CanvasGroup", {
+		Window.Root = New("Frame", {
 			BackgroundTransparency = 1,
-			BorderSizePixel = 0,
-			GroupTransparency = 1,
 			Size = Window.Size,
 			Position = Window.Position,
 			Parent = Config.Parent,
 		}, rootChildren)
-
-		-- Animation mờ dần khi hiện / ẩn ui
-		local FadeTween
-		local function FadeRoot(Show)
-			if FadeTween then
-				FadeTween:Cancel()
-			end
-			if Show then
-				Window.Root.Visible = true
-			end
-			local Tween = TweenService:Create(Window.Root, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				GroupTransparency = Show and 0 or 1,
-			})
-			FadeTween = Tween
-			Tween.Completed:Connect(function(State)
-				if State == Enum.PlaybackState.Completed and FadeTween == Tween and not Show then
-					Window.Root.Visible = false
-				end
-			end)
-			Tween:Play()
-		end
-		FadeRoot(true) -- mờ dần hiện ra lúc mới bật
 
 		CenterWindow()
 		Creator.AddSignal(Camera:GetPropertyChangedSignal("ViewportSize"), CenterWindow)
@@ -5279,9 +5216,6 @@ Components.Window = (function()
 			UpdateContainerPosition()
 		end)
 
-		-- Kích thước "bình thường" (lúc chưa phóng to). Chỉ cập nhật khi khởi tạo
-		-- hoặc khi người dùng tự kéo resize xong; KHÔNG lấy từ Window.Size lúc bấm
-		-- nút vì lúc đó Window.Size có thể đang là giá trị giữa chừng của animation.
 		local OldSizeX = Window.Size.X.Offset
 		local OldSizeY = Window.Size.Y.Offset
 		Window.Maximize = function(Value, NoPos, Instant)
@@ -5380,8 +5314,6 @@ Components.Window = (function()
 		end)
 
 		Creator.AddSignal(UserInputService.InputEnded, function(Input)
-			-- Trước đây mọi lần nhấc tay (Touch) đều ghi đè Window.Size bằng giá trị
-			-- animation đang chạy dở -> bấm phóng to/thu nhỏ liên tục làm hỏng size.
 			if Resizing == true then
 				Resizing = false
 				local Value = SizeMotor:getValue()
@@ -5435,12 +5367,103 @@ Components.Window = (function()
 			end
 		end
 
+		local FADE_TIME = 0.15
+		local Fade = { Alpha = 0, Items = nil, Conn = nil }
+
+		local function FadeCollect()
+			local items = {}
+			local function add(obj, prop)
+				local ok, v = pcall(function()
+					return obj[prop]
+				end)
+				if ok and type(v) == "number" and v < 1 then
+					table.insert(items, { obj, prop, v })
+				end
+			end
+			for _, d in ipairs(Window.Root:GetDescendants()) do
+				if d:IsA("GuiObject") then
+					add(d, "BackgroundTransparency")
+					if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+						add(d, "TextTransparency")
+						add(d, "TextStrokeTransparency")
+					elseif d:IsA("ImageLabel") or d:IsA("ImageButton") then
+						add(d, "ImageTransparency")
+					elseif d:IsA("ScrollingFrame") then
+						add(d, "ScrollBarImageTransparency")
+					end
+					if d:IsA("CanvasGroup") then
+						add(d, "GroupTransparency")
+					end
+				elseif d:IsA("UIStroke") then
+					add(d, "Transparency")
+				end
+			end
+			return items
+		end
+
+		local function FadeApply(alpha)
+			Fade.Alpha = alpha
+			for _, it in ipairs(Fade.Items) do
+				pcall(function()
+					it[1][it[2]] = it[3] + (1 - it[3]) * alpha
+				end)
+			end
+		end
+
+		local function FadeTo(target)
+			if Fade.Conn then
+				Fade.Conn:Disconnect()
+				Fade.Conn = nil
+			end
+			if not Fade.Items then
+				Fade.Items = FadeCollect()
+				Fade.Alpha = 0
+				if target == 0 then
+					Fade.Alpha = 1
+					FadeApply(1)
+				end
+			end
+			if target == 0 then
+				Window.Root.Visible = true
+			end
+
+			local from = Fade.Alpha
+			local duration = FADE_TIME * math.abs(target - from)
+			local startTime = os.clock()
+
+			local function Finish()
+				FadeApply(0)
+				Fade.Items = nil
+				if target == 1 then
+					Window.Root.Visible = false
+				end
+			end
+
+			if duration <= 0 then
+				if target == 1 then
+					Finish()
+				else
+					FadeApply(0)
+					Fade.Items = nil
+				end
+				return
+			end
+
+			Fade.Conn = RunService.RenderStepped:Connect(function()
+				local t = math.clamp((os.clock() - startTime) / duration, 0, 1)
+				local eased = TweenService:GetValue(t, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+				FadeApply(from + (target - from) * eased)
+				if t >= 1 then
+					Fade.Conn:Disconnect()
+					Fade.Conn = nil
+					Finish()
+				end
+			end)
+		end
+
 		function Window:Minimize()
 			Window.Minimized = not Window.Minimized
-			FadeRoot(not Window.Minimized)
-			if Window.Minimized and Window.SetSearchOpen then
-				Window.SetSearchOpen(false) -- đóng thanh tìm kiếm khi ẩn ui
-			end
+			FadeTo(Window.Minimized and 1 or 0)
 
 			for _, Option in next, Library.Options do
 				if Option and Option.Type == "Dropdown" and Option.Opened then
@@ -5457,7 +5480,7 @@ Components.Window = (function()
 					Content = "Press " .. Key .. " to toggle the interface.",
 					Duration = 6
 					})
-				else 
+				else
 					Library:Notify({
 						Title = "Interface",
 						Content = "Tap to the button to toggle the interface.",
@@ -5490,6 +5513,10 @@ Components.Window = (function()
 		end
 
 		function Window:Destroy()
+			if Fade.Conn then
+				Fade.Conn:Disconnect()
+				Fade.Conn = nil
+			end
 			if Library.UseAcrylic then
 				Window.AcrylicPaint.Model:Destroy()
 			end
@@ -6146,7 +6173,6 @@ ElementsTable.Dropdown = (function()
 				local windowCenterY = windowY + windowHeight / 2
 				targetY = windowCenterY - canvasHeight / 2
 
-				-- Nếu dropdown nằm trong tab có tab con: popup mọc lên ngang hàng tab con
 				do
 					local anc = container
 					local holder = nil
@@ -6835,7 +6861,6 @@ ElementsTable.Slider = (function()
 		local lastWidthText = nil
 
 		local function updateInputWidth(text, animate)
-			-- Cùng nội dung thì không tính lại (tránh GetTextSize + tween mỗi frame khi kéo)
 			if text == lastWidthText then
 				return
 			end
@@ -6986,7 +7011,6 @@ ElementsTable.Slider = (function()
 		local function StartDrag(Input)
 			Dragging = true
 			DragInput = Input
-			-- Khoá cuộn dọc của tab trong lúc kéo để không bị giành touch
 			SetScrollLock(true)
 
 			Input.Changed:Connect(function()
@@ -7006,7 +7030,6 @@ ElementsTable.Slider = (function()
 				math.clamp(Slider.Min + ((Slider.Max - Slider.Min) * SizeScale), Slider.Min, Slider.Max),
 				Slider.Rounding
 			)
-			-- Giá trị không đổi thì khỏi gọi lại callback (đỡ giật khi callback nặng)
 			if NewValue ~= Slider.Value then
 				Slider:SetValue(NewValue)
 			end
@@ -7047,7 +7070,6 @@ ElementsTable.Slider = (function()
 			end
 		end)
 
-		-- Chốt chặn: nhả chuột/nhấc tay ở BẤT KỲ đâu cũng dừng kéo (hết bị kẹt)
 		Creator.AddSignal(UserInputService.InputEnded, function(Input)
 			if not Dragging then
 				return
@@ -7899,12 +7921,6 @@ NotificationModule:Init(GUI)
 
 local New = Creator.New
 
--- ============================================================================
--- ICON SYSTEM
--- Mượn logic icon của WindUI: nạp thư viện Footagesus/Icons (Main-v2.lua),
--- mặc định pack "lucide", icon là spritesheet (ImageRectSize/ImageRectOffset),
--- hỗ trợ "pack:name", icon nhiều lớp (Parts), rbxassetid và link ảnh (http).
--- ============================================================================
 local IconsLib
 do
 	local IconsURL = "https://raw.githubusercontent.com/Footagesus/Icons/main/Main-v2.lua"
@@ -7973,7 +7989,6 @@ local function ToIconData(Result)
 	return Data
 end
 
--- Trả về bảng { Image, ImageRectSize, ImageRectOffset, Parts } hoặc { URL = ... } hoặc nil
 local function ResolveIconData(Icon)
 	if Icon == nil or Icon == "" then
 		return nil
@@ -8016,7 +8031,6 @@ local function ResolveIconData(Icon)
 		end
 	end
 
-	-- Chỉ cache khi tìm thấy (thư viện icon có thể chưa sẵn sàng lúc gọi lần đầu)
 	if Data then
 		IconCache[Icon] = Data
 	end
@@ -8033,7 +8047,6 @@ local function SanitizeFilename(Name)
 	return Clean
 end
 
--- Tải ảnh từ link (giống WindUI: request -> writefile -> getcustomasset)
 local function LoadURLIcon(Url, Callback)
 	if URLIconCache[Url] then
 		Callback(URLIconCache[Url])
@@ -8127,12 +8140,10 @@ local function ApplyIconData(Label, Data)
 	end
 end
 
--- Trả về data icon đã resolve (hoặc nil nếu không có). Giữ tên cũ để code cũ dùng được.
 function Library:GetIcon(Name)
 	return ResolveIconData(Name)
 end
 
--- Thêm pack icon riêng (giống WindUI:AddIcons)
 function Library:AddIcons(Pack, Data)
 	if IconsLib and IconsLib.AddIcons then
 		IconCache = {}
@@ -8140,7 +8151,6 @@ function Library:AddIcons(Pack, Data)
 	end
 end
 
--- Đổi icon cho một ImageLabel có sẵn
 function Library:SetIcon(Label, Icon)
 	if not Label then
 		return
@@ -8148,7 +8158,6 @@ function Library:SetIcon(Label, Icon)
 	ApplyIconData(Label, ResolveIconData(Icon))
 end
 
--- Tạo ImageLabel icon: Library:IconLabel("home", { Size = ..., ThemeTag = ... }, { children })
 function Library:IconLabel(Icon, Props, Children)
 	local Label = Creator.New("ImageLabel", Props or {}, Children)
 	ApplyIconData(Label, ResolveIconData(Icon))
@@ -8200,10 +8209,10 @@ local SaveManager = {} do
 		Toggle = {
 
 
-			Save = function(idx, object) 
+			Save = function(idx, object)
 
 
-				return { type = "Toggle", idx = idx, value = object.Value } 
+				return { type = "Toggle", idx = idx, value = object.Value }
 
 
 			end,
@@ -8212,7 +8221,7 @@ local SaveManager = {} do
 			Load = function(idx, data)
 
 
-				if SaveManager.Options[idx] then 
+				if SaveManager.Options[idx] then
 
 
 					SaveManager.Options[idx]:SetValue(data.value)
@@ -8242,7 +8251,7 @@ local SaveManager = {} do
 			Load = function(idx, data)
 
 
-				if SaveManager.Options[idx] then 
+				if SaveManager.Options[idx] then
 
 
 					SaveManager.Options[idx]:SetValue(data.value)
@@ -8272,7 +8281,7 @@ local SaveManager = {} do
 			Load = function(idx, data)
 
 
-				if SaveManager.Options[idx] then 
+				if SaveManager.Options[idx] then
 
 
 					SaveManager.Options[idx]:SetValue(data.value)
@@ -8302,7 +8311,7 @@ local SaveManager = {} do
 			Load = function(idx, data)
 
 
-				if SaveManager.Options[idx] then 
+				if SaveManager.Options[idx] then
 
 
 					SaveManager.Options[idx]:SetValueRGB(Color3.fromHex(data.value), data.transparency)
@@ -8332,7 +8341,7 @@ local SaveManager = {} do
 			Load = function(idx, data)
 
 
-				if SaveManager.Options[idx] then 
+				if SaveManager.Options[idx] then
 
 
 					SaveManager.Options[idx]:SetValue(data.key, data.mode)
@@ -8464,7 +8473,7 @@ local SaveManager = {} do
 			end
 
 
-		end	
+		end
 
 
 
@@ -8572,7 +8581,7 @@ local SaveManager = {} do
 	SaveManager.IgnoreThemeSettings = function(self)
 
 
-		self:SetIgnoreIndexes({ 
+		self:SetIgnoreIndexes({
 
 
 			"InterfaceTheme", "AcrylicToggle", "TransparentToggle", "MenuKeybind"
@@ -8842,7 +8851,7 @@ local SaveManager = {} do
 
 
 
-				if name:gsub(" ", "") == "" then 
+				if name:gsub(" ", "") == "" then
 
 
 					return self.Library:Notify({
@@ -9567,7 +9576,7 @@ Library.CreateWindow = function(self, Config)
 	local Icon = Config.Icon
 
 
-	if not fischbypass then 
+	if not fischbypass then
 
 
 		if Library:GetIcon(Icon) then
@@ -9999,92 +10008,159 @@ function Library:CreateMinimizer(Config)
 
 	local button = holder:FindFirstChildOfClass("TextButton")
 
+
 	if button then
-		local ANIM_INFO = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-		local DRAG_THRESHOLD = 10 -- kéo quá số pixel này mới tính là kéo (không tính là bấm)
-		local DOCK_GAP = 12
-		local AutoDock = Config.Position == nil -- không truyền Position: tự nằm bên trái ui (ngoài ui, không đè lên ui)
-		local Scale = New("UIScale", { Scale = 1, Parent = button })
-		local Hovering, Pressing, Moved = false, false, false
-		local DragInput, DragStart, StartPos
 
-		local function Animate()
-			TweenService:Create(Scale, ANIM_INFO, { Scale = Pressing and 0.88 or (Hovering and 1.1 or 1) }):Play()
-			TweenService:Create(button, ANIM_INFO, { Rotation = Pressing and 6 or 0 }):Play()
-		end
 
-		-- Nằm bên trái ui, cùng mép trên; bám theo khi ui bị kéo / căn giữa lại (dừng bám khi người dùng tự kéo nút)
-		local function DockLeft()
-			local Window = Library.Window
-			if not AutoDock or not (Window and Window.Root) then
-				return
-			end
-			local Pos = Window.Root.Position
-			holder.Position = UDim2.fromOffset(
-				math.max(8, Pos.X.Offset - holder.Size.X.Offset - DOCK_GAP),
-				math.max(8, Pos.Y.Offset)
-			)
-		end
-		if AutoDock and Library.Window and Library.Window.Root then
-			DockLeft()
-			Creator.AddSignal(Library.Window.Root:GetPropertyChangedSignal("Position"), DockLeft)
-		end
+		local isDragging = false
 
-		Creator.AddSignal(button.MouseEnter, function()
-			Hovering = true
-			Animate()
-		end)
-		Creator.AddSignal(button.MouseLeave, function()
-			Hovering = false
-			Animate()
-		end)
 
-		Creator.AddSignal(button.InputBegan, function(Input)
-			if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
-				Pressing = true
-				Moved = false
-				Animate()
-				if draggableWhole then
-					DragInput = Input
-					DragStart = Vector2.new(Input.Position.X, Input.Position.Y)
-					StartPos = holder.AbsolutePosition - parentGui.AbsolutePosition
+		local dragStart, dragOffset
+
+
+
+
+
+		if draggableWhole then
+
+
+			Creator.AddSignal(button.InputBegan, function(Input)
+
+
+				if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+
+
+					isDragging = true
+
+
+					local pos = Input.Position
+
+
+					dragStart = Vector2.new(pos.X, pos.Y)
+
+
+					dragOffset = holder.Position
+
+
+					local conn
+
+
+					conn = Input.Changed:Connect(function()
+
+
+						if Input.UserInputState == Enum.UserInputState.End then
+
+
+							isDragging = false
+
+
+							dragStart = nil
+
+
+							dragOffset = nil
+
+
+							conn:Disconnect()
+
+
+						end
+
+
+					end)
+
+
 				end
-			end
-		end)
 
-		Creator.AddSignal(UserInputService.InputChanged, function(Input)
-			if not DragInput or not (Input == DragInput or Input.UserInputType == Enum.UserInputType.MouseMovement) then
-				return
-			end
-			local Delta = Vector2.new(Input.Position.X, Input.Position.Y) - DragStart
-			if not Moved and Delta.Magnitude > DRAG_THRESHOLD then
-				Moved = true
-				AutoDock = false
-			end
-			if Moved then
-				local Screen = parentGui.AbsoluteSize
-				local Size = holder.AbsoluteSize
-				holder.Position = UDim2.fromOffset(
-					math.clamp(StartPos.X + Delta.X, 0, math.max(0, Screen.X - Size.X)),
-					math.clamp(StartPos.Y + Delta.Y, 0, math.max(0, Screen.Y - Size.Y))
-				)
-			end
-		end)
 
-		Creator.AddSignal(UserInputService.InputEnded, function(Input)
-			if Pressing and (Input == DragInput or Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch) then
-				Pressing = false
-				DragInput = nil
-				Animate()
-			end
-		end)
+			end)
 
-		Creator.AddSignal(button.MouseButton1Click, function()
-			if not Moved and Library.Window then
+
+
+
+
+			Creator.AddSignal(RunService.Heartbeat, function()
+
+
+				if isDragging and dragStart and dragOffset and holder and holder.Parent then
+
+
+					local mouse = LocalPlayer:GetMouse()
+
+
+					local current = Vector2.new(mouse.X, mouse.Y)
+
+
+					local delta = current - dragStart
+
+
+					local newX = dragOffset.X.Offset + delta.X
+
+
+					local newY = dragOffset.Y.Offset + delta.Y
+
+
+					local viewport = workspace.Camera.ViewportSize
+
+
+					local size = holder.AbsoluteSize
+
+
+					if newX < 0 then newX = 0 end
+
+
+					if newY < 0 then newY = 0 end
+
+
+					if newX > viewport.X - size.X then newX = viewport.X - size.X end
+
+
+					if newY > viewport.Y - size.Y then newY = viewport.Y - size.Y end
+
+
+					holder.Position = UDim2.new(0, newX, 0, newY)
+
+
+				end
+
+
+			end)
+
+
+		end
+
+
+
+
+
+		AddSignal(button.MouseButton1Click, function()
+
+
+			task.wait(0.1)
+
+
+			if not isDragging and Library.Window then
+
+
 				Library.Window:Minimize()
+
+
 			end
+
+
 		end)
+
+
 	end
+
+
+
+
+
+
+
+
+
+
 
 	self.Minimizer = holder
 
@@ -10365,7 +10441,7 @@ local MinimizeButton = New("TextButton", {
 	BorderSizePixel = 0,
 
 
-	BackgroundTransparency = 0.05, 
+	BackgroundTransparency = 0.05,
 
 
 }, {
@@ -10848,19 +10924,19 @@ Creator.AddSignal(RunService.Heartbeat, function()
 		if newY < 0 then newY = 0 end
 
 
-		if newX > viewportSize.X - minimizerSize.X then 
+		if newX > viewportSize.X - minimizerSize.X then
 
 
-			newX = viewportSize.X - minimizerSize.X 
+			newX = viewportSize.X - minimizerSize.X
 
 
 		end
 
 
-		if newY > viewportSize.Y - minimizerSize.Y then 
+		if newY > viewportSize.Y - minimizerSize.Y then
 
 
-			newY = viewportSize.Y - minimizerSize.Y 
+			newY = viewportSize.Y - minimizerSize.Y
 
 
 		end

@@ -8174,28 +8174,49 @@ local StatusBar = {
 	Drag = {},
 }
 
+-- Đo chiều rộng chữ MỘT LẦN lúc dựng để đặt kích thước cố định cho thanh
+local function MeasureWidth(Text)
+	local Ok, Size = pcall(function()
+		return TextService:GetTextSize(Text, 13, Enum.Font.GothamMedium, Vector2.new(1000, 100))
+	end)
+	return Ok and Size.X or (#Text * 8)
+end
+
 StatusBar.Items = {
-	{ Icon = "gauge", Get = function() return ("Fps: %d"):format(StatusBar.Fps) end },
-	{ Icon = "wifi", Get = function()
+	{ Icon = "gauge", Sample = function() return "Fps: 60+" end, Get = function()
+		-- Tối đa hiển thị 60; vượt thì ghi "60+" để độ rộng luôn cố định
+		if StatusBar.Fps > 60 then return "Fps: 60+" end
+		return ("Fps: %d"):format(StatusBar.Fps)
+	end },
+	{ Icon = "wifi", Sample = function() return "999MS+" end, Get = function()
 		local Ok, Ping = pcall(function() return LocalPlayer:GetNetworkPing() * 1000 end)
 		if not Ok or not Ping or Ping <= 0 then
 			Ok, Ping = pcall(function() return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() end)
 		end
-		return ("%dMS"):format(Ok and Ping and math.floor(Ping + 0.5) or 0)
+		local Value = Ok and Ping and math.floor(Ping + 0.5) or 0
+		-- Tối đa hiển thị 999; vượt thì ghi "999MS+"
+		if Value > 999 then return "999MS+" end
+		return ("%dMS"):format(Value)
 	end },
-	{ Icon = "users", Get = function() return ("%d/%dPlayer"):format(#Players:GetPlayers(), Players.MaxPlayers) end },
+	{ Icon = "users", Sample = function() return ("%d/%dPlayer"):format(Players.MaxPlayers, Players.MaxPlayers) end,
+		Get = function() return ("%d/%dPlayer"):format(#Players:GetPlayers(), Players.MaxPlayers) end },
 }
 
 function StatusBar.Update()
 	for Index, Item in ipairs(StatusBar.Items) do
-		StatusBar.Labels[Index].Text = Item.Get()
+		local Label = StatusBar.Labels[Index]
+		local Text = Item.Get()
+		-- Kích thước thanh là CỐ ĐỊNH (không co giãn) nên chỉ cần đổi chữ, không đụng layout.
+		if Label and Label.Text ~= Text then
+			Label.Text = Text
+		end
 	end
 end
 
 function StatusBar.Text(Props)
 	Props.BackgroundTransparency = 1
-	Props.AutomaticSize = Enum.AutomaticSize.X
-	Props.Size = UDim2.new(0, 0, 1, 0)
+	Props.Size = Props.Size or UDim2.new(0, 0, 1, 0)
+	Props.TextXAlignment = Props.TextXAlignment or Enum.TextXAlignment.Left
 	Props.Font = Enum.Font.GothamMedium
 	Props.TextSize = 13
 	return Creator.New("TextLabel", Props)
@@ -8315,18 +8336,29 @@ function StatusBar.Build(Config)
 		}),
 	})
 
-	-- Chiều rộng thanh tự co giãn theo nội dung (12 + 12 padding)
-	local Layout = Content:FindFirstChildOfClass("UIListLayout")
-	local function Resize()
-		Frame.Size = UDim2.fromOffset(Layout.AbsoluteContentSize.X + 24, 32)
+	-- KÍCH THƯỚC CỐ ĐỊNH: không AutomaticSize, không đo AbsoluteContentSize.
+	-- Tổng rộng = padding 24 + (nhóm icon+chữ) + dấu "|" + icon UI (20) + khoảng cách 8 giữa các phần tử.
+	local LayoutPadding, GroupGap, IconSize = 8, 5, 16
+	local SepWidth = math.ceil(MeasureWidth("|")) + 1
+	local TotalWidth = 24 + 20 -- padding trái/phải + icon UI cuối thanh
+	local ChildCount = 1 -- icon UI
+	for Index, Item in ipairs(StatusBar.Items) do
+		TotalWidth = TotalWidth + IconSize + GroupGap + math.ceil(MeasureWidth(Item.Sample and Item.Sample() or Item.Get())) + 1
+		ChildCount = ChildCount + 1
+		if Index > 1 then
+			TotalWidth = TotalWidth + SepWidth
+			ChildCount = ChildCount + 1
+		end
 	end
-	Creator.AddSignal(Layout:GetPropertyChangedSignal("AbsoluteContentSize"), Resize)
-	Resize()
+	TotalWidth = TotalWidth + LayoutPadding * (ChildCount - 1)
+	Frame.Size = UDim2.fromOffset(TotalWidth, 32)
 
 	for Index, Item in ipairs(StatusBar.Items) do
+		local LabelWidth = math.ceil(MeasureWidth(Item.Sample and Item.Sample() or Item.Get())) + 1
 		if Index > 1 then
 			StatusBar.Text({
 				Text = "|",
+				Size = UDim2.new(0, SepWidth, 1, 0),
 				LayoutOrder = Index * 2 - 2,
 				Parent = Content,
 				ThemeTag = { TextColor3 = "SubText" },
@@ -8334,8 +8366,7 @@ function StatusBar.Build(Config)
 		end
 		local Group = Creator.New("Frame", {
 			BackgroundTransparency = 1,
-			AutomaticSize = Enum.AutomaticSize.X,
-			Size = UDim2.new(0, 0, 1, 0),
+			Size = UDim2.new(0, IconSize + GroupGap + LabelWidth, 1, 0),
 			LayoutOrder = Index * 2 - 1,
 			Parent = Content,
 		}, {
@@ -8354,6 +8385,8 @@ function StatusBar.Build(Config)
 			ThemeTag = { ImageColor3 = "Accent" },
 		})
 		StatusBar.Labels[Index] = StatusBar.Text({
+			Size = UDim2.new(0, LabelWidth, 1, 0),
+			TextXAlignment = Enum.TextXAlignment.Center, -- số ngắn hơn mẫu -> tự chia đều khoảng trống 2 bên
 			LayoutOrder = 2,
 			Parent = Group,
 			ThemeTag = { TextColor3 = "Text" },

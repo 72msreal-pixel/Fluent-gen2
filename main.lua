@@ -2008,6 +2008,13 @@ do
         return translated
     end
 
+    -- Loi do Google tra ve sai dinh dang (mat/doi marker...) chu khong phai loi mang.
+    function LM:IsFormatError(reason)
+        reason = tostring(reason)
+        return reason:find("Batch ", 1, true) ~= nil or reason:find("Invalid protected", 1, true) ~= nil
+            or reason:find("Unexpected", 1, true) ~= nil or reason:find("Empty translation", 1, true) ~= nil
+    end
+
     function LM:Send(items, language, epoch)
         local url = self:URL(items, language)
         local reason = "Translation failed"
@@ -2030,11 +2037,79 @@ do
             end)
             if ok then return result end
             reason = tostring(result)
+            -- Sai dinh dang: gui lai y het cung khong khac di, de SendBatch tu chia nho.
+            if self:IsFormatError(reason) then return nil, reason end
             if attempt < self.Config.MaxRetries then
                 task.wait(math.min(30, retryAfter or (2 ^ (attempt + 1))))
             end
         end
         return nil, reason
+    end
+
+    -- Dich 1 chuoi khong dung marker (dung khi marker bi Google lam hong, thuong gap voi tieng Trung/Nhat...).
+    function LM:SendPlain(item, language, epoch)
+        if #item.Tags > 0 then return nil, "Protected tags; source retained" end
+        if self.Dead or self.Epoch ~= epoch or self.CurrentLanguage ~= language then return nil, "cancelled" end
+        local pause = self.Config.RequestInterval - (os.clock() - self.LastRequest)
+        if pause > 0 then task.wait(pause) end
+        if self.Dead or self.Epoch ~= epoch or self.CurrentLanguage ~= language then return nil, "cancelled" end
+        self.LastRequest = os.clock()
+        local url = "https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&ie=UTF-8&oe=UTF-8&sl="
+            .. httpService:UrlEncode(self.Config.SourceLanguage)
+            .. "&tl=" .. httpService:UrlEncode(language)
+            .. "&q=" .. httpService:UrlEncode(item.Text)
+        local ok, result = pcall(function()
+            local response = self:HTTP(url)
+            local body = type(response) == "string" and response or (type(response) == "table" and response.Body) or ""
+            local data = httpService:JSONDecode(body)
+            if type(data) ~= "table" or type(data[1]) ~= "table" then error("Unexpected Google JSON response") end
+            local pieces = {}
+            for _, segment in ipairs(data[1]) do
+                if type(segment) == "table" and type(segment[1]) == "string" then table.insert(pieces, segment[1]) end
+            end
+            local value = table.concat(pieces):match("^%s*(.-)%s*$")
+            if value == "" or value:find("ZXQ", 1, true) then error("Empty translation") end
+            return (item.Source:match("^%s*") or "") .. value .. (item.Source:match("%s*$") or "")
+        end)
+        if ok then return result end
+        return nil, tostring(result)
+    end
+
+    -- Gui theo batch; neu Google lam hong marker thi chia doi batch, toi 1 chuoi thi dich khong marker.
+    -- Tra ve bang ket qua theo thu tu (co the thieu vai muc) hoac nil, ly do.
+    function LM:SendBatch(items, language, epoch)
+        local result, reason = self:Send(items, language, epoch)
+        if result then return result end
+        if reason == "cancelled" or not self:IsFormatError(reason) then return nil, reason end
+        if #items == 1 then
+            local value, why = self:SendPlain(items[1], language, epoch)
+            if value then return {value} end
+            return nil, why
+        end
+        local mid = math.floor(#items / 2)
+        local left, right = {}, {}
+        for index, item in ipairs(items) do table.insert(index <= mid and left or right, item) end
+        local a, ra = self:SendBatch(left, language, epoch)
+        if ra == "cancelled" then return nil, ra end
+        local b, rb = self:SendBatch(right, language, epoch)
+        if rb == "cancelled" then return nil, rb end
+        if not a and not b then return nil, ra or rb end
+        local merged = {}
+        for index = 1, #left do merged[index] = a and a[index] or nil end
+        for index = 1, #right do merged[mid + index] = b and b[index] or nil end
+        return merged, ra or rb
+    end
+
+    -- Hen gio dich lai phan bi loi (truoc day loi 1 lan la ket o tieng goc cho den khi doi ngon ngu).
+    function LM:Retry()
+        if self.Dead or self.RetryScheduled then return end
+        self.FailCount = (self.FailCount or 0) + 1
+        if self.FailCount > 6 then return end
+        self.RetryScheduled = true
+        task.delay(self.Config.RetryCooldown + 1, function()
+            self.RetryScheduled = false
+            if not self.Dead then self:Schedule() end
+        end)
     end
 
     function LM:Work()
@@ -2063,23 +2138,42 @@ do
                 end
             end
             if #batch == 0 then break end
-            local result, reason = self:Send(batch, language, epoch)
+            local result, reason = self:SendBatch(batch, language, epoch)
             if self.Dead then break end
             if epoch == self.Epoch then
+                self.Failed[language] = self.Failed[language] or {}
                 if result then
                     self.Cache[language] = self.Cache[language] or {}
-                    for index, item in ipairs(batch) do self.Cache[language][item.Source] = result[index] end
+                    local missing = false
+                    for index, item in ipairs(batch) do
+                        if type(result[index]) == "string" then
+                            self.Cache[language][item.Source] = result[index]
+                        else
+                            missing = true
+                            self.Failed[language][item.Source] = os.clock() + self.Config.RetryCooldown
+                        end
+                    end
                     -- Re-resolve against CURRENT locale and CURRENT source; never write stale request results directly.
                     self:ApplyAll()
                     self:ScheduleSave()
-                elseif reason ~= "cancelled" then
-                    self.Failed[language] = self.Failed[language] or {}
-                    -- Stop the current locale's queue after a failed batch; do not hammer every remaining batch.
-                    for _, source in ipairs(sources) do
-                        self.Failed[language][source] = os.clock() + self.Config.RetryCooldown
+                    if missing then self:Retry() else self.FailCount = 0 end
+                elseif reason ~= "cancelled" and self.CurrentLanguage == language then
+                    if self:IsFormatError(reason) then
+                        -- Chi batch nay loi dinh dang: danh dau rieng batch, tiep tuc cac batch khac.
+                        for _, item in ipairs(batch) do
+                            self.Failed[language][item.Source] = os.clock() + self.Config.RetryCooldown
+                        end
+                        self:Error(reason)
+                        self:Retry()
+                    else
+                        -- Loi mang/429: dung het, dung don dap Google, hen gio thu lai.
+                        for _, source in ipairs(sources) do
+                            self.Failed[language][source] = os.clock() + self.Config.RetryCooldown
+                        end
+                        self:Error(reason)
+                        self:Retry()
+                        break
                     end
-                    self:Error(reason)
-                    if self.CurrentLanguage == language then break end
                 end
             end
         end
@@ -2090,11 +2184,14 @@ do
         self.Scheduled = true
         task.delay(self.Config.Debounce, function()
             self.Scheduled = false
-            if self.Dead or self.Busy then return end
+            if self.Dead then return end
+            -- Truoc day: dang Busy thi bo luon yeu cau => text moi/ngon ngu moi bi ket tieng goc.
+            if self.Busy then self.Pending = true; return end
             self.Busy = true
             local ok, err = pcall(function() self:Work() end)
             self.Busy = false
             if not ok then self:Error(err) end
+            if self.Pending then self.Pending = false; self:Schedule() end
         end)
     end
 
@@ -2144,6 +2241,7 @@ do
         if not self:IsAvailable(code) then return false, "No dictionary for this language" end
         local previous = self.CurrentLanguage
         self.CurrentLanguage = code
+        self.FailCount = 0
         self:ApplyAll()
         self:Schedule()
         self:ScheduleSave()
@@ -2155,7 +2253,7 @@ do
 
     function LM:Refresh(retryFailed)
         if self.Dead then return false end
-        if retryFailed then self.Failed = {} end
+        if retryFailed then self.Failed = {}; self.FailCount = 0 end
         self:ApplyAll()
         self:SyncDropdowns()
         self:Schedule()

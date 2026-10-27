@@ -6168,10 +6168,11 @@ ElementsTable.Dropdown = (function()
 			local targetY
 			if useFixedY and windowRoot then
 				local windowY = windowRoot.AbsolutePosition.Y
-				local windowHeight = windowRoot.AbsoluteSize.Y
-				local windowCenterY = windowY + windowHeight / 2
-				targetY = windowCenterY - canvasHeight / 2
 
+				-- Mép TRÊN của popup luôn nằm cố định ở 1 điểm neo (hàng sub-tab; nếu tab không có
+				-- sub-tab thì lấy mép trên vùng nội dung), bất kể ít hay nhiều mục.
+				-- Nhiều mục -> popup dài xuống dưới, ít mục / lọc search -> co lại về phía trên.
+				local anchorY
 				do
 					local anc = container
 					local holder = nil
@@ -6183,27 +6184,26 @@ ElementsTable.Dropdown = (function()
 						anc = anc.Parent
 					end
 					if holder and holder:IsA("GuiObject") then
-						targetY = holder.AbsolutePosition.Y
+						anchorY = holder.AbsolutePosition.Y
 					end
 				end
-				
-				local windowTop = windowY
-				local windowBottom = windowY + windowHeight
-				local viewportTop = 0
-				local viewportBottom = viewportHeight
-				
-				if targetY + canvasHeight > viewportBottom then
-					targetY = viewportBottom - canvasHeight - 5
+				if not anchorY then
+					local sf = self.ScrollFrame
+					if sf and sf:IsA("GuiObject") and sf.AbsoluteSize.Y > 0 then
+						anchorY = sf.AbsolutePosition.Y
+					else
+						anchorY = windowY + 5
+					end
 				end
-				if targetY < viewportTop then
-					targetY = viewportTop + 5
+
+				targetY = anchorY
+
+				-- chỉ chống tràn khỏi màn hình (không còn bị đẩy lên theo đáy cửa sổ)
+				if targetY + canvasHeight > viewportHeight then
+					targetY = viewportHeight - canvasHeight - 5
 				end
-				
-				if targetY + canvasHeight > windowBottom then
-					targetY = windowBottom - canvasHeight - 5
-				end
-				if targetY < windowTop then
-					targetY = windowTop + 5
+				if targetY < 0 then
+					targetY = 5
 				end
 			elseif useFixedY and Dropdown.SavedY then
 				targetY = Dropdown.SavedY

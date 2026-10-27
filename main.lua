@@ -763,7 +763,7 @@ local Themes = {
 }
 
 local Library = {
-	Version = "1.2.2",
+	Version = "1.4.6",
 
 	OpenFrames = {},
 	Options = {},
@@ -4309,7 +4309,7 @@ Components.Window = (function()
 		end
 		Window.Compact = Config.CompactTabs == true
 		Window.TabWidth = Window.Compact and (Config.CompactTabWidth or 44) or Config.TabWidth
-		-- CHỈNH CHIỀU CAO Ô SEARCH Ở ĐÂY (thanh search trượt ra sẽ tự theo): Config.CompactSearchHeight hoặc đổi số 39
+
 		Window.SearchHeight = Window.Compact and (Config.CompactSearchHeight or 39) or 28
 
 		local Selector = New("Frame", {
@@ -9749,11 +9749,6 @@ function Library:CreateMinimizer(Config)
 
 	end
 
-
-
-
-
-	-- icon dạng ảnh (rbxassetid / số / link) thì cho phủ kín nút + bo góc theo nút
 	local isImageIcon = false
 	if iconAsset == Config.Icon then
 		local I = Config.Icon
@@ -9947,10 +9942,6 @@ function Library:CreateMinimizer(Config)
 	end
 
 
-
-
-
-	-- khung trong nằm giữa holder: scale/xoay quanh tâm cho animation
 	local innerScale = New("UIScale", { Scale = 1 })
 	local inner = New("Frame", {
 		Name = "Inner",
@@ -10175,23 +10166,13 @@ function Library:CreateMinimizer(Config)
 	end
 
 
-
-
-
-
-
-
-
-
-
-	-- ===== Animation: nhấn thì lún, kéo thì nghiêng + lắc, thả ra thì nảy =====
 	do
-		local ANG_K, ANG_C = 260, 9   -- lò xo xoay (C nhỏ = lắc nhiều hơn)
-		local SC_K, SC_C = 320, 17    -- lò xo scale (C nhỏ = nảy nhiều hơn)
-		local MAX_TILT = 25           -- độ nghiêng tối đa khi kéo (độ)
-		local TILT_PER_SPEED = 0.04   -- tốc độ kéo -> độ nghiêng
-		local PRESS_SCALE = 0.86      -- lún khi nhấn
-		local DRAG_SCALE = 1.1        -- phồng lên khi đang kéo
+		local ANG_K, ANG_C = 260, 9
+		local SC_K, SC_C = 320, 17
+		local MAX_TILT = 25
+		local TILT_PER_SPEED = 0.04
+		local PRESS_SCALE = 0.86
+		local DRAG_SCALE = 1.1
 
 		local pressed, dragging, resting = false, false, true
 		local ang, angV, sc, scV, vx = 0, 0, 1, 0, 0
@@ -10220,8 +10201,8 @@ function Library:CreateMinimizer(Config)
 						conn:Disconnect()
 						local wasDragging = dragging
 						pressed, dragging = false, false
-						scV = scV + (wasDragging and 2.5 or 4)                       -- nảy lên
-						if not wasDragging then angV = angV + (math.random() < 0.5 and -60 or 60) end -- chạm nhẹ thì lắc lư
+						scV = scV + (wasDragging and 2.5 or 4)
+						if not wasDragging then angV = angV + (math.random() < 0.5 and -60 or 60) end
 					end
 				end)
 			end)
@@ -10242,7 +10223,7 @@ function Library:CreateMinimizer(Config)
 
 			if pressed and not dragging and (pos - pressPos).Magnitude > 6 then
 				dragging = true
-				scV = scV + 2 -- bị nhấc lên
+				scV = scV + 2
 			end
 
 			local scT = dragging and DRAG_SCALE or (pressed and PRESS_SCALE or 1)
@@ -10264,7 +10245,6 @@ function Library:CreateMinimizer(Config)
 				resting = true
 				setBlur(true)
 			else
-				-- blur là Part 3D không xoay được nên ẩn trong lúc đang chuyển động
 				setBlur(math.abs(ang) < 0.6 and math.abs(sc - 1) < 0.01)
 			end
 
@@ -10319,8 +10299,6 @@ end
 
 
 function Library:Destroy()
-
-	-- Dọn hiệu ứng blur của nút minimize (nó là Part nằm trong camera nên GUI:Destroy() không xoá được)
 	pcall(function()
 		if Library.MinimizerAcrylic and Library.MinimizerAcrylic.Model then
 			Library.MinimizerAcrylic.Model:Destroy()

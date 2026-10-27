@@ -1860,7 +1860,7 @@ function Library:Round(Number, Factor)
 		return math.floor(Number)
 	end
 	Number = tostring(Number)
-	return Number:find("%.") and tonumber(Number:sub(1, Number:find("%.") + Factor)) or Number
+	return Number:find("%.") and tonumber(Number:sub(1, Number:find("%.") + Factor)) or tonumber(Number) or 0
 end
 
 local function map(value, inMin, inMax, outMin, outMax)
@@ -6836,13 +6836,30 @@ ElementsTable.Slider = (function()
 			SliderRail,
 		})
 
+		local SliderHitbox = New("Frame", {
+			AnchorPoint = Vector2.new(0, 0.5),
+			Position = UDim2.new(0, -2, 0.5, 0),
+			Size = UDim2.new(1, 4, 0, 32),
+			BackgroundTransparency = 1,
+			Active = true,
+			ZIndex = 10,
+			Parent = SliderInner,
+		})
+
 		local isHovering = false
 		local inputVisible = false
 		local currentWidthTween = nil
 
+		local widthCache = {}
+
 		local function calculateInputWidth(text)
+			local length = #(text or "0")
+			local cached = widthCache[length]
+			if cached then
+				return cached
+			end
 			local textSize = game:GetService("TextService"):GetTextSize(
-				text or "0",
+				string.rep("0", math.max(length, 1)),
 				12,
 				Enum.Font.SourceSans,
 				Vector2.new(1000, 14)
@@ -6850,7 +6867,9 @@ ElementsTable.Slider = (function()
 			local padding = 8
 			local minWidth = 25
 			local maxWidth = 80
-			return math.max(minWidth, math.min(maxWidth, textSize.X + padding))
+			local width = math.max(minWidth, math.min(maxWidth, textSize.X + padding))
+			widthCache[length] = width
+			return width
 		end
 
 		local lastWidthText = nil
@@ -6936,6 +6955,12 @@ ElementsTable.Slider = (function()
 		Creator.AddSignal(SliderInput.Changed, function(property)
 			if property == "Text" then
 				local text = SliderInput.Text
+				if text:match("^%-?%d*%.?%d*$") then
+					if inputVisible or SliderInput:IsFocused() then
+						updateInputWidth(text, not Dragging)
+					end
+					return
+				end
 				local cleanText = text:gsub("[^%d%.%-]", "")
 				if cleanText:find("%-") and cleanText:find("%-") ~= 1 then
 					cleanText = cleanText:gsub("%-", "")
@@ -6997,18 +7022,25 @@ ElementsTable.Slider = (function()
 			end
 		end
 
+		local DragConnection = nil
+
 		local function StopDrag()
 			Dragging = false
 			DragInput = nil
 			SetScrollLock(false)
+			if DragConnection then
+				DragConnection:Disconnect()
+				DragConnection = nil
+			end
 		end
 
 		local function StartDrag(Input)
+			StopDrag()
 			Dragging = true
 			DragInput = Input
 			SetScrollLock(true)
 
-			Input.Changed:Connect(function()
+			DragConnection = Input.Changed:Connect(function()
 				if Input.UserInputState == Enum.UserInputState.End and DragInput == Input then
 					StopDrag()
 				end
@@ -7036,18 +7068,13 @@ ElementsTable.Slider = (function()
 			end
 		end)
 
-		Creator.AddSignal(SliderDot.InputBegan, function(Input)
+		Creator.AddSignal(SliderHitbox.InputBegan, function(Input)
 			if
 				Input.UserInputType == Enum.UserInputType.MouseButton1
 				or Input.UserInputType == Enum.UserInputType.Touch
 			then
 				StartDrag(Input)
-			end
-		end)
-
-		Creator.AddSignal(SliderDot.InputEnded, function(Input)
-			if Input == DragInput then
-				StopDrag()
+				DragTo(Input.Position.X)
 			end
 		end)
 
@@ -7081,19 +7108,6 @@ ElementsTable.Slider = (function()
 			end
 		end)
 
-		Creator.AddSignal(SliderRail.InputBegan, function(Input)
-			if Input.UserInputType == Enum.UserInputType.Touch then
-				StartDrag(Input)
-				DragTo(Input.Position.X)
-			end
-		end)
-
-		Creator.AddSignal(SliderRail.InputEnded, function(Input)
-			if Input == DragInput then
-				StopDrag()
-			end
-		end)
-
 		function Slider:OnChanged(Func)
 			Slider.Changed = Func
 			Func(Slider.Value)
@@ -7105,12 +7119,12 @@ ElementsTable.Slider = (function()
 			SliderFill.Size = UDim2.fromScale((self.Value - Slider.Min) / (Slider.Max - Slider.Min), 1)
 			SliderDisplay.Text = tostring(self.Value)
 
-			if inputVisible or SliderInput:IsFocused() then
-				SliderInput.Text = tostring(self.Value)
-				updateInputWidth(tostring(self.Value), not SliderInput:IsFocused() and not Dragging)
+			local valueText = tostring(self.Value)
+			if SliderInput.Text ~= valueText then
+				SliderInput.Text = valueText
 			end
-			if not inputVisible and not SliderInput:IsFocused() then
-				SliderInput.Text = tostring(self.Value)
+			if inputVisible or SliderInput:IsFocused() then
+				updateInputWidth(valueText, not SliderInput:IsFocused() and not Dragging)
 			end
 
 			Library:SafeCallback(Slider.Callback, self.Value)

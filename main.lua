@@ -2499,15 +2499,19 @@ Components.Section = (function()
 
 	-- Config: Title, Icon (đã resolve), Box, FontWeight, TextTransparency,
 	--         TextXAlignment, TextSize, Opened
+	-- Opened = true/false -> section đóng/mở (Box, Desc, mũi tên, chứa được các nút)
+	-- Không có Opened     -> section thường: CHỈ là tiêu đề (icon + chữ), không chứa nút, không đóng/mở, không box
+	--                        (các nút vẫn gắn thẳng vào tab/tab con như bản cũ)
 	return function(Config, Parent)
 		local Section = {}
 		local Title = Config.Title or "Section"
 		local Icon = Config.Icon
-		local Box = Config.Box == true
+		local Collapsible = type(Config.Opened) == "boolean"
+		local Box = Collapsible and Config.Box == true
 		local Collapsed = Config.Opened == false
 		local CurrentTween = nil
 
-		local Desc = Config.Description or Config.Desc
+		local Desc = Collapsible and (Config.Description or Config.Desc)
 		local HasDesc = type(Desc) == "string" and Desc ~= ""
 		local DESC_H = HasDesc and 16 or 0
 
@@ -2517,21 +2521,23 @@ Components.Section = (function()
 		local SIDE_PAD = Box and 8 or 0
 		local TextSize = Config.TextSize or 17
 
-		Section.Layout = New("UIListLayout", {
-			Padding = UDim.new(0, 5),
-		})
+		if Collapsible then
+			Section.Layout = New("UIListLayout", {
+				Padding = UDim.new(0, 5),
+			})
 
-		Section.Container = New("Frame", {
-			Size = UDim2.new(1, -SIDE_PAD * 2, 0, 26),
-			Position = UDim2.fromOffset(SIDE_PAD, HEADER_H - 1),
-			BackgroundTransparency = 1,
-			Visible = not Collapsed,
-		}, {
-			Section.Layout,
-		})
+			Section.Container = New("Frame", {
+				Size = UDim2.new(1, -SIDE_PAD * 2, 0, 26),
+				Position = UDim2.fromOffset(SIDE_PAD, HEADER_H - 1),
+				BackgroundTransparency = 1,
+				Visible = not Collapsed,
+			}, {
+				Section.Layout,
+			})
+		end
 
 		local SectionHeader = New("Frame", {
-			Size = UDim2.new(1, -32 - SIDE_PAD * 2, 0, 18),
+			Size = UDim2.new(1, (Collapsible and -32 or -16) - SIDE_PAD * 2, 0, 18),
 			Position = UDim2.fromOffset(SIDE_PAD, Box and 7 or 2),
 			BackgroundTransparency = 1,
 		}, {
@@ -2567,6 +2573,22 @@ Components.Section = (function()
 				},
 			}),
 		})
+
+		-- Section thường: chỉ có tiêu đề, không Container => không chứa nút
+		if not Collapsible then
+			Section.Root = New("Frame", {
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0, HEADER_H),
+				LayoutOrder = 7,
+				Parent = Parent,
+			}, {
+				SectionHeader,
+			})
+			if Library.Window and Library.Window.RegisterElement then
+				Library.Window.RegisterElement(Section.Root, Title, "Section")
+			end
+			return Section
+		end
 
 		-- Mũi tên: chevron-down = mở, xoay -90 = đóng
 		local Chevron = Library:IconLabel("chevron-down", {
@@ -2898,6 +2920,52 @@ Components.Tab = (function()
 		Tab.Container = Tab.ContainerFrame
 		Tab.ScrollFrame = Tab.Container
 
+		-- Dùng chung cho Tab:Section và SubTab:Section
+		-- Opened = true/false -> trả về section đóng/mở (chứa được nút)
+		-- không có Opened     -> section thường: chỉ vẽ tiêu đề, trả về chính Owner (tab/tab con) để các nút gắn thẳng vào đó
+		local function BuildSection(Owner, Config)
+			if type(Config) ~= "table" then
+				Config = { Title = tostring(Config) }
+			end
+
+			local Icon = Config.Icon
+			if Icon and not fischbypass then
+				if Library:GetIcon(Icon) then
+					Icon = Library:GetIcon(Icon)
+				end
+				if Icon == "" then
+					Icon = nil
+				end
+			end
+
+			local SectionFrame = Components.Section({
+				Title = Config.Title,
+				Icon = Icon,
+				Box = Config.Box,
+				FontWeight = Config.FontWeight,
+				TextTransparency = Config.TextTransparency,
+				TextXAlignment = Config.TextXAlignment,
+				TextSize = Config.TextSize,
+				Opened = Config.Opened,
+				Description = Config.Description or Config.Desc,
+			}, Owner.Container)
+
+			if not SectionFrame.Container then
+				return Owner
+			end
+
+			return setmetatable({
+				Type = "Section",
+				Container = SectionFrame.Container,
+				ScrollFrame = Owner.Container,
+				Toggle = function() SectionFrame.Toggle() end,
+				SetCollapsed = function(_, State, Instant) SectionFrame.SetCollapsed(State, Instant) end,
+				IsCollapsed = function() return SectionFrame.IsCollapsed() end,
+				Open = function() SectionFrame.SetCollapsed(false) end,
+				Close = function() SectionFrame.SetCollapsed(true) end,
+			}, Elements)
+		end
+
 		Tab.SubTabs = {}
 		Tab.SubTabContainers = {}
 		Tab.SelectedSubTab = 0
@@ -3155,42 +3223,7 @@ Components.Tab = (function()
 			end
 
 			function SubTab:Section(Config)
-				if type(Config) ~= "table" then
-					Config = { Title = tostring(Config) }
-				end
-				local Section = { Type = "Section" }
-
-				local Icon = Config.Icon
-				if Icon and not fischbypass then
-					if Library:GetIcon(Icon) then
-						Icon = Library:GetIcon(Icon)
-					end
-					if Icon == "" then
-						Icon = nil
-					end
-				end
-
-				local SectionFrame = Components.Section({
-					Title = Config.Title,
-					Icon = Icon,
-					Box = Config.Box,
-					FontWeight = Config.FontWeight,
-					TextTransparency = Config.TextTransparency,
-					TextXAlignment = Config.TextXAlignment,
-					TextSize = Config.TextSize,
-					Opened = Config.Opened,
-					Description = Config.Description or Config.Desc,
-				}, SubTab.Container)
-				Section.Container = SectionFrame.Container
-				Section.Toggle = function() SectionFrame.Toggle() end
-				Section.SetCollapsed = function(_, State, Instant) SectionFrame.SetCollapsed(State, Instant) end
-				Section.IsCollapsed = function() return SectionFrame.IsCollapsed() end
-				Section.Open = function() SectionFrame.SetCollapsed(false) end
-				Section.Close = function() SectionFrame.SetCollapsed(true) end
-				Section.ScrollFrame = SubTab.Container
-
-				setmetatable(Section, Elements)
-				return Section
+				return BuildSection(SubTab, Config)
 			end
 
 			function SubTab:AddSection(SectionTitle, SectionIcon, StartCollapsed, SectionDesc)
@@ -3198,7 +3231,7 @@ Components.Tab = (function()
 					Title = SectionTitle,
 					Icon = SectionIcon,
 					Description = SectionDesc,
-					Opened = not StartCollapsed,
+					Opened = if StartCollapsed == nil then nil else not StartCollapsed, -- không truyền StartCollapsed -> section thường (chỉ tiêu đề)
 				})
 			end
 
@@ -3322,47 +3355,11 @@ Components.Tab = (function()
 		end
 
 		function Tab:Section(Config)
-			if type(Config) ~= "table" then
-				Config = { Title = tostring(Config) }
-			end
-
 			if self.SelectedSubTab > 0 and self.SubTabs[self.SelectedSubTab] then
 				return self.SubTabs[self.SelectedSubTab]:Section(Config)
 			end
 
-			local Section = { Type = "Section" }
-
-			local Icon = Config.Icon
-			if Icon and not fischbypass then
-				if Library:GetIcon(Icon) then
-					Icon = Library:GetIcon(Icon)
-				end
-				if Icon == "" then
-					Icon = nil
-				end
-			end
-
-			local SectionFrame = Components.Section({
-				Title = Config.Title,
-				Icon = Icon,
-				Box = Config.Box,
-				FontWeight = Config.FontWeight,
-				TextTransparency = Config.TextTransparency,
-				TextXAlignment = Config.TextXAlignment,
-				TextSize = Config.TextSize,
-				Opened = Config.Opened,
-				Description = Config.Description or Config.Desc,
-			}, Tab.Container)
-			Section.Container = SectionFrame.Container
-			Section.Toggle = function() SectionFrame.Toggle() end
-			Section.SetCollapsed = function(_, State, Instant) SectionFrame.SetCollapsed(State, Instant) end
-			Section.IsCollapsed = function() return SectionFrame.IsCollapsed() end
-			Section.Open = function() SectionFrame.SetCollapsed(false) end
-			Section.Close = function() SectionFrame.SetCollapsed(true) end
-			Section.ScrollFrame = Tab.Container
-
-			setmetatable(Section, Elements)
-			return Section
+			return BuildSection(Tab, Config)
 		end
 
 		function Tab:AddSection(SectionTitle, SectionIcon, StartCollapsed, SectionDesc)
@@ -3370,7 +3367,7 @@ Components.Tab = (function()
 				Title = SectionTitle,
 				Icon = SectionIcon,
 				Description = SectionDesc,
-				Opened = not StartCollapsed,
+				Opened = if StartCollapsed == nil then nil else not StartCollapsed, -- không truyền StartCollapsed -> section thường (chỉ tiêu đề)
 			})
 		end
 

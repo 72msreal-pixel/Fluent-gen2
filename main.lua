@@ -8205,6 +8205,7 @@ function StatusBar.Build(Config)
 	StatusBar.Gui = Creator.New("ScreenGui", {
 		Name = "FluentStatusBar",
 		IgnoreGuiInset = true,
+		DisplayOrder = 1001,
 		ResetOnSpawn = false,
 		Parent = LocalPlayer:WaitForChild("PlayerGui"),
 	})
@@ -8212,8 +8213,8 @@ function StatusBar.Build(Config)
 
 	local Frame = Creator.New("Frame", {
 		Name = "StatusBar",
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, GuiService:GetGuiInset().Y + 8),
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -12, 0, GuiService:GetGuiInset().Y + 8),
 		Size = UDim2.fromOffset(0, 32),
 		AutomaticSize = Enum.AutomaticSize.X,
 		BackgroundTransparency = 0.1,
@@ -8287,7 +8288,7 @@ function StatusBar.Build(Config)
 	end
 	Creator.AddSignal(Frame.InputBegan, function(Input)
 		if not IsPointer(Input) then return end
-		Drag.Active, Drag.Start, Drag.Pos, Drag.Abs = true, Input.Position, Frame.Position, Frame.AbsolutePosition
+		Drag.Active, Drag.Start, Drag.Pos = true, Input.Position, Frame.Position
 		Creator.AddSignal(Input.Changed, function()
 			if Input.UserInputState == Enum.UserInputState.End then Drag.Active = false end
 		end)
@@ -8295,10 +8296,8 @@ function StatusBar.Build(Config)
 	Creator.AddSignal(UserInputService.InputChanged, function(Input)
 		if not Drag.Active then return end
 		if Input.UserInputType ~= Enum.UserInputType.MouseMovement and Input.UserInputType ~= Enum.UserInputType.Touch then return end
-		local Screen, Delta = StatusBar.Gui.AbsoluteSize, Input.Position - Drag.Start
-		local Dx = math.clamp(Drag.Abs.X + Delta.X, 0, math.max(Screen.X - Frame.AbsoluteSize.X, 0)) - Drag.Abs.X
-		local Dy = math.clamp(Drag.Abs.Y + Delta.Y, 0, math.max(Screen.Y - Frame.AbsoluteSize.Y, 0)) - Drag.Abs.Y
-		Frame.Position = UDim2.new(Drag.Pos.X.Scale, Drag.Pos.X.Offset + Dx, Drag.Pos.Y.Scale, Drag.Pos.Y.Offset + Dy)
+		local Delta = Input.Position - Drag.Start
+		Frame.Position = UDim2.new(Drag.Pos.X.Scale, Drag.Pos.X.Offset + Delta.X, Drag.Pos.Y.Scale, Drag.Pos.Y.Offset + Delta.Y)
 	end)
 
 	-- cập nhật FPS thật (đếm frame) + ping + số người chơi

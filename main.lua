@@ -766,6 +766,7 @@ local Themes = {
 }
 
 local Library = {
+	UseCanvasGroup = false, -- true = tab có hiệu ứng mờ dần nhưng cuộn nặng hơn (CanvasGroup)
 	Version = "1.2.2",
 
 	OpenFrames = {},
@@ -2704,6 +2705,22 @@ Components.Section = (function()
 		return Section
 	end
 end)()
+-- Bọc container tab bằng CanvasGroup khiến mỗi frame cuộn đều phải render lại cả nhóm
+-- (lồng 2-3 lớp là rất nặng trên mobile). Mặc định dùng Frame thường; WindUI cũng vậy.
+function Library.NewAnimGroup(Props)
+	if Library.UseCanvasGroup then
+		return Creator.New("CanvasGroup", Props)
+	end
+	Props.GroupTransparency = nil
+	return Creator.New("Frame", Props)
+end
+
+function Library.SetGroupTransparency(Obj, Value)
+	if Obj and Obj:IsA("CanvasGroup") then
+		Obj.GroupTransparency = Value
+	end
+end
+
 Components.Tab = (function()
 	local New = Creator.New
 	local Spring = Flipper.Spring.new
@@ -2807,7 +2824,7 @@ Components.Tab = (function()
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		})
 
-		Tab.ContainerAnim = New("CanvasGroup", {
+		Tab.ContainerAnim = Library.NewAnimGroup({
 			Size = UDim2.fromScale(1, 1),
 			BackgroundTransparency = 1,
 			GroupTransparency = 0,
@@ -2831,6 +2848,7 @@ Components.Tab = (function()
 			CanvasSize = UDim2.fromScale(0, 0),
 			ScrollingDirection = Enum.ScrollingDirection.Y,
 			ScrollingEnabled = true,
+			ElasticBehavior = Enum.ElasticBehavior.Never,
 		}, {
 			ContainerLayout,
 			New("UIPadding", {
@@ -2852,7 +2870,7 @@ Components.Tab = (function()
 
 		Tab.ContainerTransparencyMotor:onStep(function(Value)
 			if Tab.ContainerAnim and Tab.ContainerAnim.Parent then
-				Tab.ContainerAnim.GroupTransparency = Value
+				Library.SetGroupTransparency(Tab.ContainerAnim, Value)
 			end
 		end)
 
@@ -3024,7 +3042,7 @@ Components.Tab = (function()
 				}),
 			})
 
-			local SubTabContainerAnim = New("CanvasGroup", {
+			local SubTabContainerAnim = Library.NewAnimGroup({
 				Size = UDim2.fromScale(1, 1),
 				BackgroundTransparency = 1,
 				GroupTransparency = 0,
@@ -3048,6 +3066,7 @@ Components.Tab = (function()
 				CanvasSize = UDim2.fromScale(0, 0),
 				ScrollingDirection = Enum.ScrollingDirection.Y,
 				ScrollingEnabled = true,
+			ElasticBehavior = Enum.ElasticBehavior.Never,
 			}, {
 				New("UIListLayout", {
 					Padding = UDim.new(0, 5),
@@ -3077,7 +3096,7 @@ Components.Tab = (function()
 
 			SubTabTransparencyMotor:onStep(function(Value)
 				if SubTabContainerAnim and SubTabContainerAnim.Parent then
-					SubTabContainerAnim.GroupTransparency = Value
+					Library.SetGroupTransparency(SubTabContainerAnim, Value)
 				end
 			end)
 
@@ -3233,7 +3252,7 @@ Components.Tab = (function()
 					if Container and idx ~= PreviousSubTab and idx ~= SubTabIndex then
 						Container.Visible = false
 						Container.Position = UDim2.fromOffset(0, 0)
-						Container.GroupTransparency = 0
+						Library.SetGroupTransparency(Container, 0)
 						if self.SubTabs[idx] then
 							pcall(function()
 								self.SubTabs[idx].XMotor:setGoal(Instant(0))
@@ -3245,7 +3264,7 @@ Components.Tab = (function()
 
 				OldContainer.Visible = true
 				OldContainer.Position = UDim2.fromOffset(0, 0)
-				OldContainer.GroupTransparency = 0
+				Library.SetGroupTransparency(OldContainer, 0)
 				pcall(function()
 					OldSubTab.XMotor:setGoal(Instant(0))
 					OldSubTab.TransparencyMotor:setGoal(Instant(0))
@@ -3253,7 +3272,7 @@ Components.Tab = (function()
 
 				NewContainer.Visible = true
 				NewContainer.Position = UDim2.fromOffset(Direction * SlideDistance, 0)
-				NewContainer.GroupTransparency = 1
+				Library.SetGroupTransparency(NewContainer, 1)
 				pcall(function()
 					NewSubTab.XMotor:setGoal(Instant(Direction * SlideDistance))
 					NewSubTab.TransparencyMotor:setGoal(Instant(1))
@@ -3279,7 +3298,7 @@ Components.Tab = (function()
 						if OldContainer and OldContainer.Parent then
 							OldContainer.Visible = false
 							OldContainer.Position = UDim2.fromOffset(0, 0)
-							OldContainer.GroupTransparency = 0
+							Library.SetGroupTransparency(OldContainer, 0)
 						end
 						if OldSubTab and OldSubTab.XMotor and OldSubTab.TransparencyMotor then
 							pcall(function()
@@ -3294,7 +3313,7 @@ Components.Tab = (function()
 					if Container then
 						Container.Visible = (idx == SubTabIndex)
 						Container.Position = UDim2.fromOffset(0, 0)
-						Container.GroupTransparency = 0
+						Library.SetGroupTransparency(Container, 0)
 						if self.SubTabs[idx] then
 							pcall(function()
 								self.SubTabs[idx].XMotor:setGoal(Instant(0))
@@ -3406,7 +3425,7 @@ Components.Tab = (function()
 					if Container then
 						Container.Visible = (idx == Tab)
 						Container.Position = UDim2.fromOffset(0, 0)
-						Container.GroupTransparency = 0
+						Library.SetGroupTransparency(Container, 0)
 					end
 				end
 				return
@@ -3416,7 +3435,7 @@ Components.Tab = (function()
 				if Container and idx ~= PreviousTab and idx ~= Tab then
 					Container.Visible = false
 					Container.Position = UDim2.fromOffset(0, 0)
-					Container.GroupTransparency = 0
+					Library.SetGroupTransparency(Container, 0)
 					if TabModule.Tabs[idx] and TabModule.Tabs[idx].ContainerXMotor and TabModule.Tabs[idx].ContainerTransparencyMotor then
 						pcall(function()
 							TabModule.Tabs[idx].ContainerXMotor:setGoal(Instant(0))
@@ -3428,7 +3447,7 @@ Components.Tab = (function()
 
 			OldContainer.Visible = true
 			OldContainer.Position = UDim2.fromOffset(0, 0)
-			OldContainer.GroupTransparency = 0
+			Library.SetGroupTransparency(OldContainer, 0)
 			pcall(function()
 				OldTab.ContainerXMotor:setGoal(Instant(0))
 				OldTab.ContainerTransparencyMotor:setGoal(Instant(0))
@@ -3436,7 +3455,7 @@ Components.Tab = (function()
 
 			NewContainer.Visible = true
 			NewContainer.Position = UDim2.fromOffset(Direction * SlideDistance, 0)
-			NewContainer.GroupTransparency = 1
+			Library.SetGroupTransparency(NewContainer, 1)
 			pcall(function()
 				NewTab.ContainerXMotor:setGoal(Instant(Direction * SlideDistance))
 				NewTab.ContainerTransparencyMotor:setGoal(Instant(1))
@@ -3462,7 +3481,7 @@ Components.Tab = (function()
 					if OldContainer and OldContainer.Parent then
 						OldContainer.Visible = false
 						OldContainer.Position = UDim2.fromOffset(0, 0)
-						OldContainer.GroupTransparency = 0
+						Library.SetGroupTransparency(OldContainer, 0)
 					end
 					if OldTab and OldTab.ContainerXMotor and OldTab.ContainerTransparencyMotor then
 						pcall(function()
@@ -3478,7 +3497,7 @@ Components.Tab = (function()
 				if Container then
 					Container.Visible = (idx == Tab)
 					Container.Position = UDim2.fromOffset(0, 0)
-					Container.GroupTransparency = 0
+					Library.SetGroupTransparency(Container, 0)
 					if TabModule.Tabs[idx] and TabModule.Tabs[idx].ContainerXMotor and TabModule.Tabs[idx].ContainerTransparencyMotor then
 						pcall(function()
 							TabModule.Tabs[idx].ContainerXMotor:setGoal(Instant(0))
@@ -6478,7 +6497,6 @@ ElementsTable.Slider = (function()
 
 		local Dragging = false
 		local DragInput = nil
-		local ScrollFrame = self.ScrollFrame
 
 		local SliderFrame = Components.Element(Config.Title, Config.Description, self.Container, false, Config)
 		SliderFrame.DescLabel.Size = UDim2.new(1, -170, 0, 14)
@@ -6743,9 +6761,25 @@ ElementsTable.Slider = (function()
 			updateInputWidth(tostring(Slider.Value), false)
 		end)
 
+		local LockedScrollFrames = {}
+
 		local function SetScrollLock(Locked)
-			if ScrollFrame and ScrollFrame.Parent then
-				ScrollFrame.ScrollingEnabled = not Locked
+			if Locked then
+				local Obj = SliderFrame.Frame.Parent
+				while Obj do
+					if Obj:IsA("ScrollingFrame") and Obj.ScrollingEnabled then
+						Obj.ScrollingEnabled = false
+						table.insert(LockedScrollFrames, Obj)
+					end
+					Obj = Obj.Parent
+				end
+			else
+				for _, Frame in next, LockedScrollFrames do
+					if Frame and Frame.Parent then
+						Frame.ScrollingEnabled = true
+					end
+				end
+				table.clear(LockedScrollFrames)
 			end
 		end
 
@@ -6756,6 +6790,9 @@ ElementsTable.Slider = (function()
 		end
 
 		local function StartDrag(Input)
+			if Dragging then
+				return
+			end
 			Dragging = true
 			DragInput = Input
 			-- Khoá cuộn dọc của tab trong lúc kéo để không bị giành touch
@@ -6836,14 +6873,28 @@ ElementsTable.Slider = (function()
 			end
 		end)
 
-		Creator.AddSignal(SliderRail.InputBegan, function(Input)
-			if Input.UserInputType == Enum.UserInputType.Touch then
+		-- Vùng chạm rộng như WindUI (cả hàng slider), không còn phải nhắm đúng thanh 4px
+		local SliderHit = New("Frame", {
+			Name = "SliderHit",
+			AnchorPoint = Vector2.new(0, 0.5),
+			Position = UDim2.new(0, -7, 0.5, 0),
+			Size = UDim2.new(1, 14, 0, 34),
+			BackgroundTransparency = 1,
+			ZIndex = 3,
+			Parent = SliderInner,
+		})
+
+		Creator.AddSignal(SliderHit.InputBegan, function(Input)
+			if
+				Input.UserInputType == Enum.UserInputType.MouseButton1
+				or Input.UserInputType == Enum.UserInputType.Touch
+			then
 				StartDrag(Input)
 				DragTo(Input.Position.X)
 			end
 		end)
 
-		Creator.AddSignal(SliderRail.InputEnded, function(Input)
+		Creator.AddSignal(SliderHit.InputEnded, function(Input)
 			if Input == DragInput then
 				StopDrag()
 			end

@@ -2507,7 +2507,11 @@ Components.Section = (function()
 		local Collapsed = Config.Opened == false
 		local CurrentTween = nil
 
-		local HEADER_H = Box and 32 or 25
+		local Desc = Config.Description or Config.Desc
+		local HasDesc = type(Desc) == "string" and Desc ~= ""
+		local DESC_H = HasDesc and 16 or 0
+
+		local HEADER_H = (Box and 32 or 25) + DESC_H
 		local BOTTOM_PAD = Box and 8 or 0
 		local SIDE_PAD = Box and 8 or 0
 		local TextSize = Config.TextSize or 17
@@ -2575,8 +2579,26 @@ Components.Section = (function()
 			},
 		})
 
+		local DescLabel = HasDesc and New("TextLabel", {
+			Name = "SectionDesc",
+			RichText = true,
+			Text = Desc,
+			TextSize = 13,
+			TextTransparency = 0.25,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextYAlignment = Enum.TextYAlignment.Center,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
+			Size = UDim2.new(1, -16 - SIDE_PAD * 2, 0, 14),
+			Position = UDim2.fromOffset(SIDE_PAD, (Box and 7 or 2) + 20),
+			BackgroundTransparency = 1,
+			ThemeTag = {
+				TextColor3 = "SubText",
+			},
+		}) or nil
+
 		local HeaderButton = New("TextButton", {
-			Size = UDim2.new(1, -16, 0, Box and 30 or 22),
+			Size = UDim2.new(1, -16, 0, (Box and 30 or 22) + DESC_H),
 			Position = UDim2.fromOffset(0, 0),
 			BackgroundTransparency = 1,
 			Text = "",
@@ -2585,6 +2607,7 @@ Components.Section = (function()
 
 		local RootChildren = {
 			SectionHeader,
+			DescLabel,
 			Chevron,
 			HeaderButton,
 			Section.Container,
@@ -3154,6 +3177,7 @@ Components.Tab = (function()
 					TextXAlignment = Config.TextXAlignment,
 					TextSize = Config.TextSize,
 					Opened = Config.Opened,
+					Description = Config.Description or Config.Desc,
 				}, SubTab.Container)
 				Section.Container = SectionFrame.Container
 				Section.Toggle = function() SectionFrame.Toggle() end
@@ -3167,10 +3191,11 @@ Components.Tab = (function()
 				return Section
 			end
 
-			function SubTab:AddSection(SectionTitle, SectionIcon, StartCollapsed)
+			function SubTab:AddSection(SectionTitle, SectionIcon, StartCollapsed, SectionDesc)
 				return SubTab:Section({
 					Title = SectionTitle,
 					Icon = SectionIcon,
+					Description = SectionDesc,
 					Opened = not StartCollapsed,
 				})
 			end
@@ -3324,6 +3349,7 @@ Components.Tab = (function()
 				TextXAlignment = Config.TextXAlignment,
 				TextSize = Config.TextSize,
 				Opened = Config.Opened,
+				Description = Config.Description or Config.Desc,
 			}, Tab.Container)
 			Section.Container = SectionFrame.Container
 			Section.Toggle = function() SectionFrame.Toggle() end
@@ -3337,10 +3363,11 @@ Components.Tab = (function()
 			return Section
 		end
 
-		function Tab:AddSection(SectionTitle, SectionIcon, StartCollapsed)
+		function Tab:AddSection(SectionTitle, SectionIcon, StartCollapsed, SectionDesc)
 			return Tab:Section({
 				Title = SectionTitle,
 				Icon = SectionIcon,
+				Description = SectionDesc,
 				Opened = not StartCollapsed,
 			})
 		end

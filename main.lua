@@ -1674,87 +1674,620 @@ local function MiniMessageToRichText(text)
 	return result
 end
 
-local TextElements = {}
-local TextElementConnections = {}
+-- Fluent language subsystem. Original source strings are never read back from translated UI.
+do
+    local LM = {
+        Records = {}, Cache = {}, Failed = {}, Listeners = {}, Dropdowns = {},
+        Active = false, Dead = false, Scheduled = false, Busy = false,
+        SaveScheduled = false, Epoch = 0, LastRequest = -math.huge,
+        CurrentLanguage = "en", LastError = nil,
+    }
+    Library._LanguageManager = LM
+
+    function LM:Code(code)
+        if type(code) ~= "string" then return nil end
+        code = code:lower():gsub("_", "-")
+        if #code < 2 or #code > 24 or not code:match("^[a-z]+[a-z%-]*$") then return nil end
+        return code
+    end
+
+    function LM:Error(message)
+        self.LastError = tostring(message)
+        warn("[Fluent.Language] " .. self.LastError)
+        if self.Config and type(self.Config.OnError) == "function" then
+            local callback, detail = self.Config.OnError, self.LastError
+            task.defer(function() pcall(callback, detail) end)
+        end
+    end
+
+    function LM:Format(record, value)
+        if record.Property == "Text" and record.Object.RichText and value:find("<", 1, true) then
+            return MiniMessageToRichText(value)
+        end
+        return value
+    end
+
+    function LM:Ignored(record)
+        return record.NoTranslate or record.Object:GetAttribute("FluentNoTranslate") == true
+            or (record.Property == "Text" and record.Object:IsA("TextBox"))
+    end
+
+    function LM:Fallback(source)
+        local defaults = self.Config.Translations[self.Config.SourceLanguage]
+        return type(defaults) == "table" and type(defaults[source]) == "string" and defaults[source] or source
+    end
+
+    function LM:Lookup(source, language)
+        local dict = self.Config.Translations[language]
+        if type(dict) == "table" and type(dict[source]) == "string" then return dict[source], true end
+        if language == self.Config.SourceLanguage then return source, true end
+        if self.Config.AutoTranslations then
+            local cache = self.Cache[language]
+            if cache and type(cache[source]) == "string" then return cache[source], true end
+        end
+        return self:Fallback(source), false
+    end
+
+    function LM:NeedsTranslation(source, language)
+        if not self.Active or not self.Config.AutoTranslations or source == "" then return false end
+        if not source:match("[%a\128-\255]") then return false end
+        local _, found = self:Lookup(source, language)
+        if found then return false end
+        local failed = self.Failed[language]
+        return not (failed and failed[source] and failed[source] > os.clock())
+    end
+
+    function LM:Apply(record)
+        if self.Dead then return end
+        local value, found, anyFound = record.Source, true, false
+        local translating = self.Active and not self:Ignored(record)
+        if translating then
+            if record.Parts then
+                local values = {}
+                for index, source in ipairs(record.Parts) do
+                    local translated, resolved = self:Lookup(source, self.CurrentLanguage)
+                    values[index] = translated
+                    found = found and resolved
+                    anyFound = anyFound or resolved
+                end
+                value = table.concat(values, record.Separator)
+            else
+                value, found = self:Lookup(record.Source, self.CurrentLanguage)
+                anyFound = found
+            end
+        end
+        value = self:Format(record, value)
+        record.Expected = value
+        record.Resolved = found
+        record.Language = "source"
+        if translating then
+            record.Language = found and self.CurrentLanguage or (anyFound and "mixed" or self.Config.SourceLanguage)
+        end
+        if record.Object[record.Property] ~= value then record.Object[record.Property] = value end
+    end
+
+    function LM:ApplyAll()
+        for _, properties in pairs(self.Records) do
+            for _, record in pairs(properties) do self:Apply(record) end
+        end
+    end
+
+    function LM:Untrack(object)
+        local properties = self.Records[object]
+        if not properties then return end
+        self.Records[object] = nil
+        for _, record in pairs(properties) do
+            for _, connection in ipairs(record.Connections) do connection:Disconnect() end
+        end
+        if self.Active and self.Config.AutoPruneCache then self:ScheduleSave() end
+    end
+
+    function LM:Track(object, properties)
+        if self.Dead or not (object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox")) then return end
+        properties = properties or {}
+        if properties.RichText == nil then object.RichText = true end
+        local records = {}
+        self.Records[object] = records
+        local names = object:IsA("TextBox") and {"Text", "PlaceholderText"} or {"Text"}
+        for _, property in ipairs(names) do
+            local record = {
+                Object = object, Property = property,
+                Source = type(properties[property]) == "string" and properties[property] or object[property],
+                NoTranslate = properties.NoTranslate == true, Connections = {},
+            }
+            records[property] = record
+            self:Apply(record)
+            table.insert(record.Connections, object:GetPropertyChangedSignal(property):Connect(function()
+                local current = object[property]
+                if current == record.Expected then return end
+                -- External assignments are new SOURCE strings, not reverse lookups of rendered translations.
+                record.Source, record.Parts = current, nil
+                self:Apply(record)
+                self:Schedule()
+                self:ScheduleSave()
+            end))
+            table.insert(record.Connections, object:GetAttributeChangedSignal("FluentNoTranslate"):Connect(function()
+                self:Apply(record)
+                self:Schedule()
+            end))
+        end
+        table.insert(records.Text.Connections, object.Destroying:Connect(function() self:Untrack(object) end))
+        table.insert(records.Text.Connections, object:GetPropertyChangedSignal("RichText"):Connect(function()
+            self:Apply(records.Text)
+        end))
+        self:Schedule()
+    end
+
+    function LM:Collect()
+        local result, seen = {}, {}
+        for _, properties in pairs(self.Records) do
+            for _, record in pairs(properties) do
+                if not self:Ignored(record) then
+                    for _, source in ipairs(record.Parts or {record.Source}) do
+                        if not seen[source] then
+                            seen[source] = true
+                            table.insert(result, source)
+                        end
+                    end
+                end
+            end
+        end
+        table.sort(result)
+        return result, seen
+    end
+
+    function LM:PruneCache()
+        local _, live = self:Collect()
+        local removed = 0
+        for _, dict in pairs(self.Cache) do
+            for source in pairs(dict) do
+                if not live[source] then dict[source] = nil; removed = removed + 1 end
+            end
+        end
+        return removed
+    end
+
+    function LM:ReadDisk()
+        if not self.Config.Cache or type(readfile) ~= "function" then return nil end
+        local ok, content = pcall(readfile, self.Config.CacheFile)
+        if not ok then return nil end
+        local decoded, data = pcall(function() return httpService:JSONDecode(content) end)
+        if not decoded or type(data) ~= "table" or data.Version ~= 1
+            or data.SourceLanguage ~= self.Config.SourceLanguage then return nil end
+        if type(data.Translations) == "table" then
+            for code, dict in pairs(data.Translations) do
+                local normalized = self:Code(code)
+                if normalized and type(dict) == "table" then
+                    self.Cache[normalized] = self.Cache[normalized] or {}
+                    for source, value in pairs(dict) do
+                        if type(source) == "string" and type(value) == "string" then
+                            self.Cache[normalized][source] = value
+                        end
+                    end
+                end
+            end
+        end
+        return self:Code(data.SelectedLanguage)
+    end
+
+    function LM:SaveCache()
+        if not self.Active or not self.Config.Cache or type(writefile) ~= "function" then return false end
+        if self.Config.AutoPruneCache then self:PruneCache() end
+        local ok, err = pcall(function()
+            local folder = self.Config.CacheFile:match("^(.*)/[^/]+$")
+            if folder and type(makefolder) == "function" then
+                local path = ""
+                for piece in folder:gmatch("[^/]+") do
+                    path = path == "" and piece or path .. "/" .. piece
+                    if type(isfolder) ~= "function" or not isfolder(path) then
+                        local made, reason = pcall(makefolder, path)
+                        if not made and (type(isfolder) ~= "function" or not isfolder(path)) then error(reason) end
+                    end
+                end
+            end
+            writefile(self.Config.CacheFile, httpService:JSONEncode({
+                Version = 1, SourceLanguage = self.Config.SourceLanguage,
+                SelectedLanguage = self.Config.SaveSelection and self.CurrentLanguage or nil,
+                Translations = self.Cache,
+            }))
+        end)
+        if not ok then self:Error("Cannot save cache: " .. tostring(err)) end
+        return ok
+    end
+
+    function LM:ScheduleSave()
+        if not self.Active or self.SaveScheduled or self.Dead then return end
+        self.SaveScheduled = true
+        task.delay(1, function()
+            self.SaveScheduled = false
+            if not self.Dead then self:SaveCache() end
+        end)
+    end
+
+    function LM:HTTP(url)
+        if type(self.Config.Request) == "function" then
+            return self.Config.Request({Url = url, Method = "GET", Timeout = 15})
+        end
+        local sender = request or http_request or (syn and syn.request) or (http and http.request)
+        if type(sender) == "function" then return sender({Url = url, Method = "GET", Timeout = 15}) end
+        if RunService:IsClient() then
+            error("Auto translation needs Request = function(options) ... end (server proxy), or a supported HTTP request function. HttpService cannot send HTTP from a normal LocalScript.")
+        end
+        return httpService:RequestAsync({Url = url, Method = "GET"})
+    end
+
+    function LM:Protect(source)
+        if source:find("ZXQ", 1, true) then return nil end
+        local tags = {}
+        local text = source:gsub("<[^>]+>", function(tag)
+            table.insert(tags, tag)
+            return string.format("ZXQT%04dQXZ", #tags)
+        end)
+        return text, tags
+    end
+
+    function LM:Restore(value, tags)
+        local seen, invalid = {}, false
+        value = value:gsub("ZXQT(%d+)QXZ", function(index)
+            index = tonumber(index)
+            if not tags[index] or seen[index] then invalid = true; return "" end
+            seen[index] = true
+            return tags[index]
+        end)
+        for index in ipairs(tags) do if not seen[index] then return nil end end
+        if invalid or value:find("ZXQ", 1, true) then return nil end
+        return value
+    end
+
+    function LM:Payload(items)
+        local pieces = {}
+        for index, item in ipairs(items) do
+            table.insert(pieces, string.format("ZXQB%06dQXZ\n%s\n", index, item.Text))
+        end
+        table.insert(pieces, "ZXQENDQXZ")
+        return table.concat(pieces)
+    end
+
+    function LM:URL(items, language)
+        return "https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&ie=UTF-8&oe=UTF-8&sl="
+            .. httpService:UrlEncode(self.Config.SourceLanguage)
+            .. "&tl=" .. httpService:UrlEncode(language)
+            .. "&q=" .. httpService:UrlEncode(self:Payload(items))
+    end
+
+    function LM:Decode(body, items)
+        local data = httpService:JSONDecode(body)
+        if type(data) ~= "table" or type(data[1]) ~= "table" then error("Unexpected Google JSON response") end
+        local pieces = {}
+        for _, segment in ipairs(data[1]) do
+            if type(segment) == "table" and type(segment[1]) == "string" then table.insert(pieces, segment[1]) end
+        end
+        local output, starts, ends = table.concat(pieces), {}, {}
+        local cursor = 1
+        for index in ipairs(items) do
+            local marker = string.format("ZXQB%06dQXZ", index)
+            local first, last = output:find(marker, cursor, true)
+            if not first or output:find(marker, last + 1, true) then error("Batch marker missing or duplicated; source text retained") end
+            if index == 1 and output:sub(1, first - 1):match("%S") then error("Unexpected batch prefix") end
+            starts[index], ends[index], cursor = first, last, last + 1
+        end
+        local finish, finishEnd = output:find("ZXQENDQXZ", cursor, true)
+        if not finish or output:sub(finishEnd + 1):match("%S") then error("Batch end marker missing or invalid") end
+        local translated = {}
+        for index, item in ipairs(items) do
+            local value = output:sub(ends[index] + 1, (starts[index + 1] or finish) - 1)
+            value = value:match("^%s*(.-)%s*$")
+            value = self:Restore(value, item.Tags)
+            if not value or (value == "" and item.Source:match("%S")) then error("Invalid protected text; source text retained") end
+            -- Preserve the source's outer spacing, not the batching newlines.
+            translated[index] = (item.Source:match("^%s*") or "") .. value .. (item.Source:match("%s*$") or "")
+        end
+        return translated
+    end
+
+    function LM:Send(items, language, epoch)
+        local url = self:URL(items, language)
+        local reason = "Translation failed"
+        for attempt = 0, self.Config.MaxRetries do
+            if self.Dead or self.Epoch ~= epoch or self.CurrentLanguage ~= language then return nil, "cancelled" end
+            local pause = self.Config.RequestInterval - (os.clock() - self.LastRequest)
+            if pause > 0 then task.wait(pause) end
+            if self.Dead or self.Epoch ~= epoch or self.CurrentLanguage ~= language then return nil, "cancelled" end
+            self.LastRequest = os.clock()
+            local status, retryAfter = 0, nil
+            local ok, result = pcall(function()
+                local response = self:HTTP(url)
+                if type(response) == "string" then return self:Decode(response, items) end
+                if type(response) ~= "table" then error("Invalid HTTP response") end
+                status = tonumber(response.StatusCode or response.Status) or 0
+                local headers = response.Headers or {}
+                retryAfter = tonumber(headers["Retry-After"] or headers["retry-after"])
+                if status < 200 or status >= 300 or response.Success == false then error("HTTP " .. tostring(status)) end
+                return self:Decode(response.Body or "", items)
+            end)
+            if ok then return result end
+            reason = tostring(result)
+            if attempt < self.Config.MaxRetries then
+                task.wait(math.min(30, retryAfter or (2 ^ (attempt + 1))))
+            end
+        end
+        return nil, reason
+    end
+
+    function LM:Work()
+        while self.Active and not self.Dead and self.Config.AutoTranslations do
+            local epoch, language = self.Epoch, self.CurrentLanguage
+            local sources = self:Collect()
+            local batch = {}
+            for _, source in ipairs(sources) do
+                if self:NeedsTranslation(source, language) then
+                    local text, tags = self:Protect(source)
+                    if text then
+                        local item = {Source = source, Text = text, Tags = tags}
+                        table.insert(batch, item)
+                        if #self:URL(batch, language) > self.Config.MaxURLLength or #batch > self.Config.BatchSize then
+                            table.remove(batch)
+                            if #batch > 0 then break end
+                            self.Failed[language] = self.Failed[language] or {}
+                            self.Failed[language][source] = os.clock() + self.Config.RetryCooldown
+                            self:Error("Text exceeds batch URL limit; supply a manual translation or shorten this source")
+                        end
+                    else
+                        self.Failed[language] = self.Failed[language] or {}
+                        self.Failed[language][source] = os.clock() + self.Config.RetryCooldown
+                        self:Error("Source contains reserved ZXQ markers; supply a manual translation")
+                    end
+                end
+            end
+            if #batch == 0 then break end
+            local result, reason = self:Send(batch, language, epoch)
+            if self.Dead then break end
+            if epoch == self.Epoch then
+                if result then
+                    self.Cache[language] = self.Cache[language] or {}
+                    for index, item in ipairs(batch) do self.Cache[language][item.Source] = result[index] end
+                    -- Re-resolve against CURRENT locale and CURRENT source; never write stale request results directly.
+                    self:ApplyAll()
+                    self:ScheduleSave()
+                elseif reason ~= "cancelled" then
+                    self.Failed[language] = self.Failed[language] or {}
+                    -- Stop the current locale's queue after a failed batch; do not hammer every remaining batch.
+                    for _, source in ipairs(sources) do
+                        self.Failed[language][source] = os.clock() + self.Config.RetryCooldown
+                    end
+                    self:Error(reason)
+                    if self.CurrentLanguage == language then break end
+                end
+            end
+        end
+    end
+
+    function LM:Schedule()
+        if self.Dead or not self.Active or not self.Config.AutoTranslations or self.Scheduled then return end
+        self.Scheduled = true
+        task.delay(self.Config.Debounce, function()
+            self.Scheduled = false
+            if self.Dead or self.Busy then return end
+            self.Busy = true
+            local ok, err = pcall(function() self:Work() end)
+            self.Busy = false
+            if not ok then self:Error(err) end
+        end)
+    end
+
+    function LM:GetLanguages()
+        local result, seen = {}, {}
+        local function add(code)
+            code = self:Code(code)
+            if code and not seen[code] then seen[code] = true; table.insert(result, code) end
+        end
+        add(self.Config.DefaultLanguage)
+        for code, dict in pairs(self.Config.Translations) do if type(dict) == "table" then add(code) end end
+        if self.Config.AutoTranslations then
+            for _, code in ipairs(self.Config.Languages) do add(code) end
+            add(self.CurrentLanguage)
+        end
+        table.sort(result)
+        return result
+    end
+
+    function LM:IsAvailable(code)
+        if self.Config.AutoTranslations then return true end
+        return code == self.Config.DefaultLanguage or type(self.Config.Translations[code]) == "table"
+    end
+
+    function LM:Notify(previous)
+        for listener in pairs(self.Listeners) do
+            local ok, err = pcall(listener, self.CurrentLanguage, previous)
+            if not ok then self:Error(err) end
+        end
+        self:SyncDropdowns()
+    end
+
+    function LM:OnChanged(callback)
+        assert(type(callback) == "function", "OnChanged expects a function")
+        self.Listeners[callback] = true
+        local handle = {}
+        function handle:Disconnect() LM.Listeners[callback] = nil end
+        return handle
+    end
+
+    function LM:SetLanguage(code)
+        if self.Dead then return false, "Language manager was destroyed" end
+        if not self.Active then return false, "Call Fluent:LanguageManager first" end
+        code = self:Code(code)
+        if not code then return false, "Invalid language code" end
+        if not self.Config.Enabled and code ~= self.Config.DefaultLanguage then return false, "Language switching is disabled" end
+        if not self:IsAvailable(code) then return false, "No dictionary for this language" end
+        local previous = self.CurrentLanguage
+        self.CurrentLanguage = code
+        self:ApplyAll()
+        self:Schedule()
+        self:ScheduleSave()
+        if previous ~= code then self:Notify(previous) end
+        return true
+    end
+
+    function LM:GetLanguage() return self.CurrentLanguage end
+
+    function LM:Refresh(retryFailed)
+        if self.Dead then return false end
+        if retryFailed then self.Failed = {} end
+        self:ApplyAll()
+        self:SyncDropdowns()
+        self:Schedule()
+        self:ScheduleSave()
+        return true
+    end
+
+    function LM:SetTranslations(language, dictionary, replace)
+        language = self:Code(language)
+        assert(language and type(dictionary) == "table", "Expected language code and dictionary")
+        local target = replace and {} or (self.Config.Translations[language] or {})
+        for source, value in pairs(dictionary) do
+            assert(type(source) == "string" and (type(value) == "string" or value == false), "Translations must map source strings to strings (false removes an entry)")
+            target[source] = value ~= false and value or nil
+        end
+        self.Config.Translations[language] = target
+        return self:Refresh()
+    end
+
+    function LM:ClearCache(language)
+        if language then
+            language = self:Code(language)
+            assert(language, "Invalid language code")
+            self.Cache[language], self.Failed[language] = nil, nil
+        else self.Cache, self.Failed = {}, {} end
+        self.Epoch = self.Epoch + 1
+        self:Refresh()
+    end
+
+    function LM:GetOriginalText(object, property)
+        property = property or "Text"
+        local records = self.Records[object]
+        return records and records[property] and records[property].Source or object[property]
+    end
+
+    function LM:SetOriginalText(object, source, property)
+        property = property or "Text"
+        assert(type(source) == "string", "Original text must be a string")
+        local records = self.Records[object]
+        local record = records and records[property]
+        if not record then object[property] = source; return end
+        record.Source, record.Parts = source, nil
+        self:Apply(record)
+        self:Schedule()
+        self:ScheduleSave()
+    end
+
+    function LM:SetTextParts(object, sources, separator)
+        local records = self.Records[object]
+        local record = records and records.Text
+        if not record then object.Text = table.concat(sources, separator or ", "); return end
+        record.Parts = {}
+        for index, source in ipairs(sources) do record.Parts[index] = tostring(source) end
+        record.Separator = separator or ", "
+        record.Source = table.concat(record.Parts, record.Separator)
+        self:Apply(record)
+        self:Schedule()
+    end
+
+    function LM:SyncDropdowns()
+        for dropdown, entry in pairs(self.Dropdowns) do
+            if dropdown.Elements and dropdown.Elements.TitleLabel.Parent == nil then
+                self.Dropdowns[dropdown] = nil
+            else
+                entry.Syncing = true
+                local values = self:GetLanguages()
+                if not table.find(values, self.CurrentLanguage) then table.insert(values, self.CurrentLanguage) end
+                dropdown:SetValues(values)
+                dropdown:SetValue(self.CurrentLanguage)
+                entry.Syncing = false
+            end
+        end
+    end
+
+    function LM:AddDropdown(tab, options)
+        options = options or {}
+        local entry = {Syncing = true}
+        local dropdown = tab:AddDropdown(options.Id or "FluentLanguage", {
+            Title = options.Title or "Language", Description = options.Description,
+            Values = self:GetLanguages(), Default = self.CurrentLanguage,
+            Multi = false, AllowNull = false, Search = true, NoTranslateValues = true,
+            Callback = function(code)
+                if entry.Syncing then return end
+                local ok = self:SetLanguage(code)
+                if not ok then self:SyncDropdowns() end
+            end,
+        })
+        entry.Syncing = false
+        self.Dropdowns[dropdown] = entry
+        return dropdown
+    end
+
+    function LM:Configure(options)
+        assert(not self.Dead, "Language manager was destroyed")
+        options = options or {}
+        local default = assert(self:Code(options.DefaultLanguage or "en"), "Invalid DefaultLanguage")
+        local source = assert(self:Code(options.SourceLanguage or default), "Invalid SourceLanguage")
+        local translations = {}
+        for code, dict in pairs(options.Translations or {}) do
+            local normalized = self:Code(code)
+            assert(normalized and type(dict) == "table", "Translations must contain language tables")
+            translations[normalized] = dict
+        end
+        local oldSource = self.Config and self.Config.SourceLanguage
+        local oldFile = self.Config and self.Config.CacheFile
+        self.Config = {
+            Enabled = options.Enabled ~= false, AutoTranslations = options.AutoTranslations == true,
+            DefaultLanguage = default, SourceLanguage = source, Translations = translations,
+            Languages = options.Languages or {"en", "vi", "zh-CN", "zh-TW", "ja", "ko", "fr", "de", "es", "th", "id", "pt", "ru", "ar"},
+            Cache = options.Cache ~= false, CacheFile = options.CacheFile or "Fluent/LanguageCache.json",
+            SaveSelection = options.SaveSelection ~= false, AutoPruneCache = options.AutoPruneCache == true,
+            Debounce = math.max(0.05, tonumber(options.Debounce) or 0.4),
+            BatchSize = math.max(1, math.floor(tonumber(options.BatchSize) or 40)),
+            MaxURLLength = math.max(512, math.min(12000, tonumber(options.MaxURLLength) or 6500)),
+            RequestInterval = math.max(0.25, tonumber(options.RequestInterval) or 1.5),
+            MaxRetries = math.max(0, math.min(3, math.floor(tonumber(options.MaxRetries) or 2))),
+            RetryCooldown = math.max(5, tonumber(options.RetryCooldown) or 60),
+            Request = options.Request, OnError = options.OnError,
+        }
+        if oldSource ~= source or oldFile ~= self.Config.CacheFile then self.Cache = {} end
+        self.Epoch = self.Epoch + 1
+        self.Failed = {}
+        self.Active = true
+        local previous = self.CurrentLanguage
+        local saved = self:ReadDisk()
+        local selected = self:Code(options.Language) or (self.Config.SaveSelection and saved) or default
+        if not self.Config.Enabled or not self:IsAvailable(selected) then selected = default end
+        self.CurrentLanguage = selected
+        self:ApplyAll()
+        self:Notify(previous)
+        self:Schedule()
+        self:ScheduleSave()
+        return self
+    end
+
+    function LM:Destroy()
+        if self.Dead then return end
+        self:SaveCache()
+        self.Dead = true
+        self.Epoch = self.Epoch + 1
+        local objects = {}
+        for object in pairs(self.Records) do table.insert(objects, object) end
+        for _, object in ipairs(objects) do self:Untrack(object) end
+        self.Listeners, self.Dropdowns = {}, {}
+    end
+
+    function Library:LanguageManager(options) return LM:Configure(options) end
+    function Library:SetLanguage(code) return LM:SetLanguage(code) end
+    function Library:GetLanguage() return LM:GetLanguage() end
+    function Library:SetOriginalText(object, text, property) return LM:SetOriginalText(object, text, property) end
+    function Library:GetOriginalText(object, property) return LM:GetOriginalText(object, property) end
+end
 
 local function setupMiniMessageSupport(object, properties)
-	if not (object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox")) then
-		return
-	end
-	
-	local richTextExplicitlySet = properties and properties.RichText ~= nil
-	if not richTextExplicitlySet then
-		object.RichText = true
-	elseif properties.RichText == false then
-		object.RichText = false
-	end
-	
-	local lastText = object.Text or ""
-	local isConverting = false
-	
-	local function convertTextIfNeeded(text)
-		if not text or type(text) ~= "string" then
-			return text
-		end
-		
-		local hasRichTextTags = text:match('<font color="[^"]+">')
-		
-		if hasRichTextTags then
-			return text
-		end
-		
-		if text:match("<[^>]+>") then
-		local hasMiniMessagePattern =
-			text:match("<%w+>") or
-			text:match("<color:") or
-			text:match("<#[%x%x%x%x%x%x]>") or
-			text:match("<gradient:") or
-			text:match("<reset>") or
-			text:match("<obfuscated>") or
-			text:match("</%w+>") or
-			text:match("</color>")
-			
-			if hasMiniMessagePattern then
-				if not object.RichText then
-					object.RichText = true
-				end
-				return MiniMessageToRichText(text)
-			end
-		end
-		
-		return text
-	end
-	
-	local connection = object:GetPropertyChangedSignal("Text"):Connect(function()
-		if isConverting then
-			return
-		end
-		
-		local currentText = object.Text or ""
-		
-		if currentText ~= lastText then
-			local converted = convertTextIfNeeded(currentText)
-			if converted ~= currentText then
-				isConverting = true
-				object.Text = converted
-				lastText = converted
-				isConverting = false
-			else
-				lastText = currentText
-			end
-		end
-	end)
-	
-	table.insert(TextElementConnections, connection)
-	TextElements[object] = true
-	
-	if object.Text then
-		local converted = convertTextIfNeeded(object.Text)
-		if converted ~= object.Text then
-			object.Text = converted
-			lastText = converted
-		end
-	end
+    Library._LanguageManager:Track(object, properties)
 end
 
 function Creator.New(Name, Properties, Children)
@@ -1767,7 +2300,7 @@ function Creator.New(Name, Properties, Children)
 	local originalText = Properties and Properties.Text
 
 	for Name, Value in next, Properties or {} do
-		if Name ~= "ThemeTag" then
+		if Name ~= "ThemeTag" and Name ~= "NoTranslate" then
 			Object[Name] = Value
 		end
 	end
@@ -2216,6 +2749,7 @@ Components.Element = (function()
 		local Options = Options or {}
 
 		Element.TitleLabel = New("TextLabel", {
+            NoTranslate = Options.NoTranslate == true,
 			FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Medium, Enum.FontStyle.Normal),
 			Text = Title,
 			TextColor3 = Color3.fromRGB(240, 240, 240),
@@ -2259,6 +2793,7 @@ Components.Element = (function()
 		Element.TitleLabel.Parent = Element.Header
 
 		Element.DescLabel = New("TextLabel", {
+            NoTranslate = Options.NoTranslate == true,
 			FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
 			Text = Desc,
 			TextColor3 = Color3.fromRGB(200, 200, 200),
@@ -2324,7 +2859,7 @@ Components.Element = (function()
 		})
 
 		function Element:SetTitle(Set)
-			Element.TitleLabel.Text = Set
+			Library:SetOriginalText(Element.TitleLabel, Set or "")
 			local hasTitle = (Set ~= nil and Set ~= "")
 			Element.Header.Visible = hasTitle
 
@@ -2408,7 +2943,7 @@ Components.Element = (function()
 			else
 				Element.DescLabel.Visible = true
 			end
-			Element.DescLabel.Text = Set
+			Library:SetOriginalText(Element.DescLabel, Set)
 			if Library.Window and Library.Window.AllElements and Library.Window.AllElements[Element.Frame] then
 				Library.Window.AllElements[Element.Frame].description = Set
 			elseif Library.Windows and #Library.Windows > 0 then
@@ -5860,6 +6395,7 @@ ElementsTable.Dropdown = (function()
 		local container = self.Container
 
 		local DropdownDisplay = New("TextLabel", {
+            NoTranslate = Config.NoTranslateValues == true,
 			FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
 			Text = "",
 			TextColor3 = Color3.fromRGB(240, 240, 240),
@@ -6401,11 +6937,13 @@ ElementsTable.Dropdown = (function()
 		function Dropdown:Display()
 			local Values = Dropdown.Values
 			local Str = ""
+            local SelectedSources = {}
 
 			if Config.Multi then
 				for Idx, Value in next, Values do
 					if Dropdown.Value[Value] then
 						Str = Str .. Value .. ", "
+                        table.insert(SelectedSources, tostring(Value))
 					end
 				end
 				Str = Str:sub(1, #Str - 2)
@@ -6413,7 +6951,11 @@ ElementsTable.Dropdown = (function()
 				Str = Dropdown.Value or ""
 			end
 
-			DropdownDisplay.Text = (Str == "" and "--" or Str)
+			if Config.Multi and #SelectedSources > 0 then
+                Library._LanguageManager:SetTextParts(DropdownDisplay, SelectedSources, ", ")
+            else
+                Library:SetOriginalText(DropdownDisplay, (Str == "" and "--" or tostring(Str)))
+            end
 		end
 
 		function Dropdown:GetActiveValues()
@@ -6471,6 +7013,7 @@ ElementsTable.Dropdown = (function()
 				})
 
 				local ButtonLabel = New("TextLabel", {
+                    NoTranslate = Config.NoTranslateValues == true,
 					FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
 					Text = Value,
 					TextColor3 = Color3.fromRGB(200, 200, 200),
@@ -7173,6 +7716,7 @@ ElementsTable.Keybind = (function()
 		Keybind.Elements = KeybindFrame
 
 		local KeybindDisplayLabel = New("TextLabel", {
+            NoTranslate = true,
 			FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
 			Text = Config.Default,
 			TextColor3 = Color3.fromRGB(240, 240, 240),
@@ -8381,6 +8925,7 @@ function StatusBar.Build(Config)
 			ThemeTag = { ImageColor3 = "Accent" },
 		})
 		StatusBar.Labels[Index] = StatusBar.Text({
+            NoTranslate = true,
 			Size = UDim2.new(0, LabelWidth, 1, 0),
 			TextXAlignment = Enum.TextXAlignment.Center,
 			LayoutOrder = 2,
@@ -10668,6 +11213,7 @@ end
 
 
 function Library:Destroy()
+    if Library._LanguageManager then Library._LanguageManager:Destroy() end
 	pcall(function()
 		if Library.MinimizerAcrylic and Library.MinimizerAcrylic.Model then
 			Library.MinimizerAcrylic.Model:Destroy()

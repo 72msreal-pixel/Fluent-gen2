@@ -2512,7 +2512,7 @@ Components.Section = (function()
 		local DESC_H = HasDesc and 16 or 0
 
 		local HEADER_H = (Box and 32 or 25) + DESC_H
-		local EXTRA_W = 6 -- kéo section (và các nút bên trong) dài qua phải thêm một chút
+		local EXTRA_W = 4 -- kéo section (và các nút bên trong) dài qua phải thêm một chút
 		local BOTTOM_PAD = Box and 8 or 0
 		local SIDE_PAD = Box and 8 or 0
 		local TextSize = Config.TextSize or 17
@@ -2848,7 +2848,7 @@ Components.Tab = (function()
 		}, {
 			ContainerLayout,
 			New("UIPadding", {
-				PaddingRight = UDim.new(0, 10),
+				PaddingRight = UDim.new(0, 6),
 				PaddingLeft = UDim.new(0, 1),
 				PaddingTop = UDim.new(0, 1),
 				PaddingBottom = UDim.new(0, 1),
@@ -2945,7 +2945,7 @@ Components.Tab = (function()
 				-- Đường kẻ phân cách dưới hàng tab con
 				New("Frame", {
 					Name = "SubTabDivider",
-					Size = UDim2.new(1, -11, 0, 1),
+					Size = UDim2.new(1, -2, 0, 1),
 					Position = UDim2.fromOffset(1, 48),
 					BackgroundTransparency = 0.88,
 					BorderSizePixel = 0,
@@ -2956,7 +2956,7 @@ Components.Tab = (function()
 				})
 
 				local SubTabContainerHolder = New("Frame", {
-					Size = UDim2.new(1, -11, 1, -60),
+					Size = UDim2.new(1, -2, 1, -60),
 					Position = UDim2.fromOffset(1, 52),
 					BackgroundTransparency = 1,
 					ClipsDescendants = true,
@@ -3067,7 +3067,7 @@ Components.Tab = (function()
 					SortOrder = Enum.SortOrder.LayoutOrder,
 				}),
 				New("UIPadding", {
-					PaddingRight = UDim.new(0, 10),
+					PaddingRight = UDim.new(0, 4),
 					PaddingLeft = UDim.new(0, 1),
 					PaddingTop = UDim.new(0, 1),
 					PaddingBottom = UDim.new(0, 1),

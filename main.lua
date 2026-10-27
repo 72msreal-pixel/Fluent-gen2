@@ -9466,8 +9466,13 @@ local SaveManager = {} do
 				})
 			end
 
-			if result then
-				AutoloadButton:SetDesc("Current autoload config: none")
+			SaveManager.Options.SaveManager_ConfigList:SetValues(self:RefreshConfigList())
+			SaveManager.Options.SaveManager_ConfigList:SetValue(nil)
+
+			if result and AutoloadButton then
+				pcall(function()
+					AutoloadButton:SetDesc("Current autoload config: none")
+				end)
 			end
 
 			self.Library:Notify({
@@ -9476,9 +9481,6 @@ local SaveManager = {} do
 				SubContent = string.format("Deleted config %q", name),
 				Duration = 7
 			})
-
-			SaveManager.Options.SaveManager_ConfigList:SetValues(self:RefreshConfigList())
-			SaveManager.Options.SaveManager_ConfigList:SetValue(nil)
 		end})
 
 		SaveManager:SetIgnoreIndexes({ "SaveManager_ConfigList", "SaveManager_ConfigName" })

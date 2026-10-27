@@ -234,6 +234,7 @@ local SaveManager = {} do
 		assert(self.Library, "Must set SaveManager.Library")
 
 		local section = tab:AddSection("Configuration")
+		local AutoloadButton
 
 		section:AddInput("SaveManager_ConfigName", {
 			Title = "Config name"
@@ -320,8 +321,13 @@ local SaveManager = {} do
 					})
 				end
 
-				if result then
-					AutoloadButton:SetDesc("Current autoload config: none")
+				SaveManager.Options.SaveManager_ConfigList:SetValues(self:RefreshConfigList())
+				SaveManager.Options.SaveManager_ConfigList:SetValue(nil)
+
+				if result and AutoloadButton then
+					pcall(function()
+						AutoloadButton:SetDesc("Current autoload config: none")
+					end)
 				end
 
 				self.Library:Notify({
@@ -330,9 +336,6 @@ local SaveManager = {} do
 					SubContent = string.format("Deleted config %q", name),
 					Duration = 7
 				})
-
-				SaveManager.Options.SaveManager_ConfigList:SetValues(self:RefreshConfigList())
-				SaveManager.Options.SaveManager_ConfigList:SetValue(nil)
 			end
 		})
 
@@ -368,7 +371,6 @@ local SaveManager = {} do
 			end
 		})
 
-		local AutoloadButton
 		AutoloadButton = section:AddButton({
 			Title = "Set as autoload",
 			Description = "Current autoload config: none",

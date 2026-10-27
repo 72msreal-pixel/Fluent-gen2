@@ -4841,9 +4841,10 @@ Components.Window = (function()
 		local searchHeight = Window.Compact and 40 or 28
 		local totalOffset = (Window.ShowSearch and searchHeight or 0) + imageOffset
 
+		local SEARCH_DROP = 5 -- đẩy ô search (và cả cột tab) xuống thêm vài px, chỉnh số này nếu muốn thấp/cao hơn
 		local TabFrame = New("Frame", {
-			Size = UDim2.new(0, Window.TabWidth, 1, Window.ShowSearch and -63 or -31),
-			Position = UDim2.new(0, 12, 0, Window.ShowSearch and 54 or 19),
+			Size = UDim2.new(0, Window.TabWidth, 1, Window.ShowSearch and -(63 + SEARCH_DROP) or -31),
+			Position = UDim2.new(0, 12, 0, Window.ShowSearch and (54 + SEARCH_DROP) or 19),
 			BackgroundTransparency = 1,
 			ClipsDescendants = true,
 		}, {

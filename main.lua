@@ -10,7 +10,9 @@ ___________.__                        __      ________               ________
 
 local Lighting = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
-local LocalPlayer = game:GetService("Players").LocalPlayer
+local Players = game:GetService("Players")
+local Stats = game:GetService("Stats")
+local LocalPlayer = Players.LocalPlayer
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local GuiService = game:GetService("GuiService")
@@ -8161,6 +8163,158 @@ function Library:IconLabel(Icon, Props, Children)
 	return Label
 end
 
+-- ================= STATUS BAR (FPS | PING | PLAYER) =================
+local StatusBar = {
+	Frame = nil,
+	Labels = {},
+	Fps = 0,
+	Frames = 0,
+	Elapsed = 0,
+	Interval = 0.5,
+	Drag = {},
+}
+
+StatusBar.Items = {
+	{ Icon = "gauge", Get = function() return ("Fps: %d"):format(StatusBar.Fps) end },
+	{ Icon = "wifi", Get = function()
+		local Ok, Ping = pcall(function() return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() end)
+		return ("%dMS"):format(Ok and math.floor(Ping + 0.5) or 0)
+	end },
+	{ Icon = "users", Get = function() return ("%d/%dPlayer"):format(#Players:GetPlayers(), Players.MaxPlayers) end },
+}
+
+function StatusBar.Update()
+	for Index, Item in ipairs(StatusBar.Items) do
+		StatusBar.Labels[Index].Text = Item.Get()
+	end
+end
+
+function StatusBar.Text(Props)
+	Props.BackgroundTransparency = 1
+	Props.AutomaticSize = Enum.AutomaticSize.X
+	Props.Size = UDim2.new(0, 0, 1, 0)
+	Props.Font = Enum.Font.GothamMedium
+	Props.TextSize = 13
+	return Creator.New("TextLabel", Props)
+end
+
+function StatusBar.Build(Config)
+	local Frame = Creator.New("Frame", {
+		Name = "StatusBar",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 16),
+		Size = UDim2.fromOffset(0, 32),
+		AutomaticSize = Enum.AutomaticSize.X,
+		BackgroundTransparency = 0.1,
+		ZIndex = 50,
+		Active = true,
+		Parent = Library.GUI,
+		ThemeTag = { BackgroundColor3 = "AcrylicMain" },
+	}, {
+		Creator.New("UICorner", { CornerRadius = UDim.new(0, 8) }),
+		Creator.New("UIStroke", { Thickness = 1, ThemeTag = { Color = "AcrylicBorder" } }),
+		Creator.New("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) }),
+		Creator.New("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Padding = UDim.new(0, 8),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+	})
+	StatusBar.Frame = Frame
+
+	for Index, Item in ipairs(StatusBar.Items) do
+		if Index > 1 then
+			StatusBar.Text({
+				Text = "|",
+				LayoutOrder = Index * 2 - 2,
+				Parent = Frame,
+				ThemeTag = { TextColor3 = "SubText" },
+			})
+		end
+		local Group = Creator.New("Frame", {
+			BackgroundTransparency = 1,
+			AutomaticSize = Enum.AutomaticSize.X,
+			Size = UDim2.new(0, 0, 1, 0),
+			LayoutOrder = Index * 2 - 1,
+			Parent = Frame,
+		}, {
+			Creator.New("UIListLayout", {
+				FillDirection = Enum.FillDirection.Horizontal,
+				VerticalAlignment = Enum.VerticalAlignment.Center,
+				Padding = UDim.new(0, 5),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+		})
+		Library:IconLabel(Item.Icon, {
+			Size = UDim2.fromOffset(16, 16),
+			BackgroundTransparency = 1,
+			LayoutOrder = 1,
+			Parent = Group,
+			ThemeTag = { ImageColor3 = "Accent" },
+		})
+		StatusBar.Labels[Index] = StatusBar.Text({
+			LayoutOrder = 2,
+			Parent = Group,
+			ThemeTag = { TextColor3 = "Text" },
+		})
+	end
+
+	-- icon UI (cuối thanh)
+	Library:IconLabel(Config.StatusBarIcon or Config.Icon or "layout-dashboard", {
+		Size = UDim2.fromOffset(18, 18),
+		BackgroundTransparency = 1,
+		LayoutOrder = 100,
+		Parent = Frame,
+		ThemeTag = { ImageColor3 = "Accent" },
+	})
+
+	-- kéo thả (chuột + cảm ứng)
+	local Drag = StatusBar.Drag
+	local function IsPointer(Input)
+		return Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch
+	end
+	Creator.AddSignal(Frame.InputBegan, function(Input)
+		if not IsPointer(Input) then return end
+		Drag.Active, Drag.Start, Drag.Pos, Drag.Abs = true, Input.Position, Frame.Position, Frame.AbsolutePosition
+		Creator.AddSignal(Input.Changed, function()
+			if Input.UserInputState == Enum.UserInputState.End then Drag.Active = false end
+		end)
+	end)
+	Creator.AddSignal(UserInputService.InputChanged, function(Input)
+		if not Drag.Active then return end
+		if Input.UserInputType ~= Enum.UserInputType.MouseMovement and Input.UserInputType ~= Enum.UserInputType.Touch then return end
+		local Screen, Delta = Library.GUI.AbsoluteSize, Input.Position - Drag.Start
+		local Dx = math.clamp(Drag.Abs.X + Delta.X, 0, math.max(Screen.X - Frame.AbsoluteSize.X, 0)) - Drag.Abs.X
+		local Dy = math.clamp(Drag.Abs.Y + Delta.Y, 0, math.max(Screen.Y - Frame.AbsoluteSize.Y, 0)) - Drag.Abs.Y
+		Frame.Position = UDim2.new(Drag.Pos.X.Scale, Drag.Pos.X.Offset + Dx, Drag.Pos.Y.Scale, Drag.Pos.Y.Offset + Dy)
+	end)
+
+	-- cập nhật FPS thật (đếm frame) + ping + số người chơi
+	Creator.AddSignal(RunService.Heartbeat, function(Dt)
+		if not Frame.Visible then return end
+		StatusBar.Frames = StatusBar.Frames + 1
+		StatusBar.Elapsed = StatusBar.Elapsed + Dt
+		if StatusBar.Elapsed >= StatusBar.Interval then
+			StatusBar.Fps = math.floor(StatusBar.Frames / StatusBar.Elapsed + 0.5)
+			StatusBar.Frames, StatusBar.Elapsed = 0, 0
+			StatusBar.Update()
+		end
+	end)
+	StatusBar.Update()
+end
+
+-- Bật/tắt thanh trạng thái: Library:SetStatusBar(true/false)
+function Library:SetStatusBar(Enabled, Config)
+	if StatusBar.Frame and StatusBar.Frame.Parent then
+		StatusBar.Frame.Visible = Enabled and true or false
+		if Enabled then StatusBar.Update() end
+	elseif Enabled then
+		StatusBar.Build(Config or {})
+	end
+end
+-- ====================================================================
+
 local Elements = {}
 Elements.__index = Elements
 Elements.__namecall = function(Table, Key, ...)
@@ -9668,6 +9822,8 @@ Library.CreateWindow = function(self, Config)
 
 
 	table.insert(Library.Windows, Window)
+
+	Library:SetStatusBar(Config.StatusBar, Config)
 
 
 	InterfaceManager:SetTheme(Config.Theme)

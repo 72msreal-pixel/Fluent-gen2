@@ -8177,8 +8177,11 @@ local StatusBar = {
 StatusBar.Items = {
 	{ Icon = "gauge", Get = function() return ("Fps: %d"):format(StatusBar.Fps) end },
 	{ Icon = "wifi", Get = function()
-		local Ok, Ping = pcall(function() return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() end)
-		return ("%dMS"):format(Ok and math.floor(Ping + 0.5) or 0)
+		local Ok, Ping = pcall(function() return LocalPlayer:GetNetworkPing() * 1000 end)
+		if not Ok or not Ping or Ping <= 0 then
+			Ok, Ping = pcall(function() return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() end)
+		end
+		return ("%dMS"):format(Ok and Ping and math.floor(Ping + 0.5) or 0)
 	end },
 	{ Icon = "users", Get = function() return ("%d/%dPlayer"):format(#Players:GetPlayers(), Players.MaxPlayers) end },
 }
@@ -8199,16 +8202,24 @@ function StatusBar.Text(Props)
 end
 
 function StatusBar.Build(Config)
+	StatusBar.Gui = Creator.New("ScreenGui", {
+		Name = "FluentStatusBar",
+		IgnoreGuiInset = true,
+		ResetOnSpawn = false,
+		Parent = LocalPlayer:WaitForChild("PlayerGui"),
+	})
+	ProtectGui(StatusBar.Gui)
+
 	local Frame = Creator.New("Frame", {
 		Name = "StatusBar",
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 16),
+		Position = UDim2.new(0.5, 0, 0, GuiService:GetGuiInset().Y + 8),
 		Size = UDim2.fromOffset(0, 32),
 		AutomaticSize = Enum.AutomaticSize.X,
 		BackgroundTransparency = 0.1,
 		ZIndex = 50,
 		Active = true,
-		Parent = Library.GUI,
+		Parent = StatusBar.Gui,
 		ThemeTag = { BackgroundColor3 = "AcrylicMain" },
 	}, {
 		Creator.New("UICorner", { CornerRadius = UDim.new(0, 8) }),
@@ -8284,7 +8295,7 @@ function StatusBar.Build(Config)
 	Creator.AddSignal(UserInputService.InputChanged, function(Input)
 		if not Drag.Active then return end
 		if Input.UserInputType ~= Enum.UserInputType.MouseMovement and Input.UserInputType ~= Enum.UserInputType.Touch then return end
-		local Screen, Delta = Library.GUI.AbsoluteSize, Input.Position - Drag.Start
+		local Screen, Delta = StatusBar.Gui.AbsoluteSize, Input.Position - Drag.Start
 		local Dx = math.clamp(Drag.Abs.X + Delta.X, 0, math.max(Screen.X - Frame.AbsoluteSize.X, 0)) - Drag.Abs.X
 		local Dy = math.clamp(Drag.Abs.Y + Delta.Y, 0, math.max(Screen.Y - Frame.AbsoluteSize.Y, 0)) - Drag.Abs.Y
 		Frame.Position = UDim2.new(Drag.Pos.X.Scale, Drag.Pos.X.Offset + Dx, Drag.Pos.Y.Scale, Drag.Pos.Y.Offset + Dy)
@@ -10488,6 +10499,7 @@ function Library:Destroy()
 
 
 		Library.GUI:Destroy()
+		if StatusBar.Gui then StatusBar.Gui:Destroy() StatusBar.Gui, StatusBar.Frame = nil, nil end
 
 
 	end

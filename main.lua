@@ -2573,7 +2573,7 @@ Components.Section = (function()
 			Size = UDim2.fromOffset(16, 16),
 			AnchorPoint = Vector2.new(1, 0.5),
 			-- căn giữa theo chiều dọc của cả header (kể cả khi có desc), sát phải ngang icon của nút
-			Position = UDim2.new(1, -10 - SIDE_PAD, 0, (Box and 16 or 11) + DESC_H / 2),
+			Position = UDim2.new(1, -4 - SIDE_PAD, 0, (Box and 16 or 11) + DESC_H / 2),
 			BackgroundTransparency = 1,
 			Rotation = Collapsed and -90 or 0,
 			ThemeTag = {

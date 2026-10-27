@@ -9950,13 +9950,26 @@ function Library:CreateMinimizer(Config)
 
 
 
+	-- khung trong nằm giữa holder: scale/xoay quanh tâm cho animation
+	local innerScale = New("UIScale", { Scale = 1 })
+	local inner = New("Frame", {
+		Name = "Inner",
+		Parent = holder,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+	}, { innerScale })
+
+	local miniAcrylic
+
 	if useAcrylic then
 
 
-		local miniAcrylic = Acrylic.AcrylicPaint()
+		miniAcrylic = Acrylic.AcrylicPaint()
 
 
-		miniAcrylic.Frame.Parent = holder
+		miniAcrylic.Frame.Parent = inner
 
 
 		miniAcrylic.Frame.Size = UDim2.fromScale(1, 1)
@@ -10016,7 +10029,7 @@ function Library:CreateMinimizer(Config)
 	local btnInstance = createButton(not isMobile)
 
 
-	btnInstance.Parent = holder
+	btnInstance.Parent = inner
 
 
 	btnInstance.ZIndex = (holder.ZIndex or 0) + 1
@@ -10025,7 +10038,7 @@ function Library:CreateMinimizer(Config)
 
 
 
-	local button = holder:FindFirstChildOfClass("TextButton")
+	local button = inner:FindFirstChildOfClass("TextButton")
 
 
 	if button then
@@ -10171,6 +10184,95 @@ function Library:CreateMinimizer(Config)
 
 
 
+	-- ===== Animation: nhấn thì lún, kéo thì nghiêng + lắc, thả ra thì nảy =====
+	do
+		local ANG_K, ANG_C = 260, 9   -- lò xo xoay (C nhỏ = lắc nhiều hơn)
+		local SC_K, SC_C = 320, 17    -- lò xo scale (C nhỏ = nảy nhiều hơn)
+		local MAX_TILT = 25           -- độ nghiêng tối đa khi kéo (độ)
+		local TILT_PER_SPEED = 0.04   -- tốc độ kéo -> độ nghiêng
+		local PRESS_SCALE = 0.86      -- lún khi nhấn
+		local DRAG_SCALE = 1.1        -- phồng lên khi đang kéo
+
+		local pressed, dragging, resting = false, false, true
+		local ang, angV, sc, scV, vx = 0, 0, 1, 0, 0
+		local lastPos = holder.AbsolutePosition
+		local pressPos = lastPos
+		local blurOn = true
+
+		local function setBlur(on)
+			if blurOn == on then return end
+			blurOn = on
+			if miniAcrylic and miniAcrylic.SetVisibility then
+				pcall(function() miniAcrylic.SetVisibility(on and holder.Visible) end)
+			end
+		end
+
+		if button then
+			Creator.AddSignal(button.InputBegan, function(Input)
+				if Input.UserInputType ~= Enum.UserInputType.MouseButton1 and Input.UserInputType ~= Enum.UserInputType.Touch then
+					return
+				end
+				pressed, dragging, resting = true, false, false
+				pressPos = holder.AbsolutePosition
+				local conn
+				conn = Input.Changed:Connect(function()
+					if Input.UserInputState == Enum.UserInputState.End then
+						conn:Disconnect()
+						local wasDragging = dragging
+						pressed, dragging = false, false
+						scV = scV + (wasDragging and 2.5 or 4)                       -- nảy lên
+						if not wasDragging then angV = angV + (math.random() < 0.5 and -60 or 60) end -- chạm nhẹ thì lắc lư
+					end
+				end)
+			end)
+		end
+
+		Creator.AddSignal(RunService.Heartbeat, function(dt)
+			if not holder or not holder.Parent then return end
+			local pos = holder.AbsolutePosition
+			if resting and not pressed then
+				lastPos = pos
+				return
+			end
+			dt = math.clamp(dt, 1 / 240, 1 / 20)
+
+			local rawVx = (pos.X - lastPos.X) / dt
+			lastPos = pos
+			vx = vx + (rawVx - vx) * 0.35
+
+			if pressed and not dragging and (pos - pressPos).Magnitude > 6 then
+				dragging = true
+				scV = scV + 2 -- bị nhấc lên
+			end
+
+			local scT = dragging and DRAG_SCALE or (pressed and PRESS_SCALE or 1)
+			local angT = 0
+			if dragging then
+				angT = math.clamp(vx * TILT_PER_SPEED, -MAX_TILT, MAX_TILT) + math.sin(os.clock() * 14) * 2.5
+			end
+
+			local h = dt / 2
+			for _ = 1, 2 do
+				angV = angV + ((angT - ang) * ANG_K - angV * ANG_C) * h
+				ang = ang + angV * h
+				scV = scV + ((scT - sc) * SC_K - scV * SC_C) * h
+				sc = sc + scV * h
+			end
+
+			if not pressed and math.abs(ang) < 0.05 and math.abs(angV) < 0.5 and math.abs(sc - 1) < 0.002 and math.abs(scV) < 0.05 then
+				ang, angV, sc, scV, vx = 0, 0, 1, 0, 0
+				resting = true
+				setBlur(true)
+			else
+				-- blur là Part 3D không xoay được nên ẩn trong lúc đang chuyển động
+				setBlur(math.abs(ang) < 0.6 and math.abs(sc - 1) < 0.01)
+			end
+
+			inner.Rotation = ang
+			innerScale.Scale = sc
+		end)
+	end
+
 	self.Minimizer = holder
 
 
@@ -10218,6 +10320,20 @@ end
 
 function Library:Destroy()
 
+	-- Dọn hiệu ứng blur của nút minimize (nó là Part nằm trong camera nên GUI:Destroy() không xoá được)
+	pcall(function()
+		if Library.MinimizerAcrylic and Library.MinimizerAcrylic.Model then
+			Library.MinimizerAcrylic.Model:Destroy()
+		end
+		Library.MinimizerAcrylic = nil
+	end)
+	pcall(function()
+		if Library.Minimizer then
+			Library.Minimizer:Destroy()
+			Library.Minimizer = nil
+		end
+	end)
+	pcall(function() BlurFolder:ClearAllChildren() end)
 
 	if Library.Window then
 

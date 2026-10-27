@@ -1908,21 +1908,35 @@ do
         if type(self.Config.Request) == "function" then
             return self.Config.Request({Url = url, Method = "GET", Timeout = 15})
         end
-        -- Uu tien game:HttpGet (on dinh, it bi Google 429 hon request() tren Delta/mobile).
-        -- Tra ve string body; LM:Send se Decode truc tiep.
-        local okGet, body = pcall(function() return game:HttpGet(url) end)
-        if okGet and type(body) == "string" and body ~= "" then return body end
+        -- Thu lan luot nhieu endpoint Google (429 thuong theo tung host/IP) va ca HttpGet lan request().
+        -- Bat ky phan hoi nao bat dau bang "[" (JSON) deu duoc coi la thanh cong.
+        local hosts = {
+            "https://translate.googleapis.com/translate_a/single",
+            "https://clients5.google.com/translate_a/single",
+            "https://translate.google.com/translate_a/single",
+        }
+        local query = url:match("%?(.*)$") or ""
         local sender = request or http_request or (syn and syn.request) or (http and http.request)
-        if type(sender) == "function" then return sender({Url = url, Method = "GET", Timeout = 15}) end
-        if not okGet and not RunService:IsClient() then
-            -- server: roi xuong HttpService ben duoi
-        elseif not okGet then
-            error("HttpGet failed: " .. tostring(body))
+        local problems = {}
+        for _, host in ipairs(hosts) do
+            local target = host .. "?" .. query
+            if host:find("clients5", 1, true) then target = target:gsub("client=gtx", "client=dict-chrome-ex") end
+            local okGet, body = pcall(function() return game:HttpGet(target) end)
+            if okGet and type(body) == "string" and body:sub(1, 1) == "[" then return body end
+            table.insert(problems, (host:match("//([^/]+)") or host) .. " HttpGet: " .. (okGet and "bad body" or tostring(body):sub(1, 60)))
+            if type(sender) == "function" then
+                local okReq, res = pcall(sender, {Url = target, Method = "GET", Timeout = 15})
+                local status = okReq and type(res) == "table" and tonumber(res.StatusCode or res.Status) or 0
+                if okReq and type(res) == "table" and status >= 200 and status < 300 and type(res.Body) == "string" and res.Body:sub(1, 1) == "[" then
+                    return res.Body
+                end
+                table.insert(problems, (host:match("//([^/]+)") or host) .. " request: " .. (okReq and ("HTTP " .. status) or tostring(res):sub(1, 60)))
+            end
         end
-        if RunService:IsClient() then
-            error("Auto translation needs Request = function(options) ... end (server proxy), or a supported HTTP request function. HttpService cannot send HTTP from a normal LocalScript.")
+        if not sender and RunService:IsClient() and #problems == 0 then
+            error("Auto translation needs Request = function(options) ... end or a supported HTTP function.")
         end
-        return httpService:RequestAsync({Url = url, Method = "GET"})
+        error("All endpoints failed -> " .. table.concat(problems, " | "))
     end
 
     function LM:Protect(source)

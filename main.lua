@@ -2485,8 +2485,11 @@ end)()
 Components.Section = (function()
 	local New = Creator.New
 
-	return function(Title, Parent, Icon)
+	return function(Title, Parent, Icon, StartCollapsed)
 		local Section = {}
+		local Collapsed = StartCollapsed == true
+		local CurrentTween = nil
+		local HEADER_H = 25
 
 		Section.Layout = New("UIListLayout", {
 			Padding = UDim.new(0, 5),
@@ -2496,6 +2499,7 @@ Components.Section = (function()
 			Size = UDim2.new(1, 0, 0, 26),
 			Position = UDim2.fromOffset(0, 24),
 			BackgroundTransparency = 1,
+			Visible = not Collapsed,
 		}, {
 			Section.Layout,
 		})
@@ -2538,21 +2542,109 @@ Components.Section = (function()
 			}),
 		})
 
+		-- Mũi tên đóng/mở (chevron-down = đang mở, xoay -90 = đang đóng)
+		local Chevron = New("ImageLabel", {
+			Image = "rbxassetid://10709790948",
+			Size = UDim2.fromOffset(16, 16),
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, -20, 0, 11),
+			BackgroundTransparency = 1,
+			Rotation = Collapsed and -90 or 0,
+			ThemeTag = {
+				ImageColor3 = "SubText",
+			},
+		})
+
+		-- Nút bấm phủ lên header
+		local HeaderButton = New("TextButton", {
+			Size = UDim2.new(1, -16, 0, 22),
+			Position = UDim2.fromOffset(0, 0),
+			BackgroundTransparency = 1,
+			Text = "",
+			ZIndex = 5,
+		})
+
 		Section.Root = New("Frame", {
 			BackgroundTransparency = 1,
-			Size = UDim2.new(1, 0, 0, 26),
+			Size = UDim2.new(1, 0, 0, Collapsed and HEADER_H or 26),
 			LayoutOrder = 7,
 			Parent = Parent,
 		}, {
 			SectionHeader,
+			Chevron,
+			HeaderButton,
 			Section.Container,
 		})
 
+		local function FullHeight()
+			return Section.Layout.AbsoluteContentSize.Y + HEADER_H
+		end
+
 		Creator.AddSignal(Section.Layout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
 			Section.Container.Size = UDim2.new(1, 0, 0, Section.Layout.AbsoluteContentSize.Y)
-			Section.Root.Size = UDim2.new(1, 0, 0, Section.Layout.AbsoluteContentSize.Y + 25)
+			-- Đang đóng hoặc đang chạy animation thì không ép size
+			if not Collapsed and not CurrentTween then
+				Section.Root.Size = UDim2.new(1, 0, 0, FullHeight())
+			end
 		end)
 
+		function Section.SetCollapsed(State, Instant)
+			State = State and true or false
+			if State == Collapsed then
+				return
+			end
+			Collapsed = State
+
+			if CurrentTween then
+				CurrentTween:Cancel()
+				CurrentTween = nil
+			end
+
+			local TargetHeight = Collapsed and HEADER_H or FullHeight()
+			local Info = TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+
+			if Instant then
+				Section.Container.Visible = not Collapsed
+				Section.Root.Size = UDim2.new(1, 0, 0, TargetHeight)
+				Chevron.Rotation = Collapsed and -90 or 0
+				return
+			end
+
+			Section.Container.Visible = true
+			Section.Root.ClipsDescendants = true
+
+			TweenService:Create(Chevron, Info, { Rotation = Collapsed and -90 or 0 }):Play()
+
+			local Tween = TweenService:Create(Section.Root, Info, {
+				Size = UDim2.new(1, 0, 0, TargetHeight),
+			})
+			CurrentTween = Tween
+			Tween.Completed:Connect(function(PlaybackState)
+				if CurrentTween ~= Tween then
+					return
+				end
+				CurrentTween = nil
+				Section.Root.ClipsDescendants = false
+				if Collapsed then
+					Section.Container.Visible = false
+				elseif PlaybackState == Enum.PlaybackState.Completed then
+					Section.Root.Size = UDim2.new(1, 0, 0, FullHeight())
+				end
+			end)
+			Tween:Play()
+		end
+
+		function Section.Toggle()
+			Section.SetCollapsed(not Collapsed)
+		end
+
+		function Section.IsCollapsed()
+			return Collapsed
+		end
+
+		HeaderButton.MouseButton1Click:Connect(function()
+			Section.Toggle()
+		end)
 
 		if Library.Window and Library.Window.RegisterElement then
 			Library.Window.RegisterElement(Section.Root, Title, "Section")
@@ -2989,7 +3081,7 @@ Components.Tab = (function()
 				self:SelectSubTab(SubTabIndex)
 			end
 
-			function SubTab:AddSection(SectionTitle, SectionIcon)
+			function SubTab:AddSection(SectionTitle, SectionIcon, StartCollapsed)
 				local Section = { Type = "Section" }
 
 				local Icon = SectionIcon
@@ -3003,8 +3095,11 @@ Components.Tab = (function()
 					end
 				end
 
-				local SectionFrame = Components.Section(SectionTitle, SubTab.Container, Icon)
+				local SectionFrame = Components.Section(SectionTitle, SubTab.Container, Icon, StartCollapsed)
 				Section.Container = SectionFrame.Container
+				Section.Toggle = function() SectionFrame.Toggle() end
+				Section.SetCollapsed = function(_, State, Instant) SectionFrame.SetCollapsed(State, Instant) end
+				Section.IsCollapsed = function() return SectionFrame.IsCollapsed() end
 				Section.ScrollFrame = SubTab.Container
 
 				setmetatable(Section, Elements)
@@ -3130,9 +3225,9 @@ Components.Tab = (function()
 			end
 		end
 
-		function Tab:AddSection(SectionTitle, SectionIcon)
+		function Tab:AddSection(SectionTitle, SectionIcon, StartCollapsed)
 			if self.SelectedSubTab > 0 and self.SubTabs[self.SelectedSubTab] then
-				return self.SubTabs[self.SelectedSubTab]:AddSection(SectionTitle, SectionIcon)
+				return self.SubTabs[self.SelectedSubTab]:AddSection(SectionTitle, SectionIcon, StartCollapsed)
 			end
 
 			local Section = { Type = "Section" }
@@ -3148,8 +3243,11 @@ Components.Tab = (function()
 				end
 			end
 
-			local SectionFrame = Components.Section(SectionTitle, Tab.Container, Icon)
+			local SectionFrame = Components.Section(SectionTitle, Tab.Container, Icon, StartCollapsed)
 			Section.Container = SectionFrame.Container
+			Section.Toggle = function() SectionFrame.Toggle() end
+			Section.SetCollapsed = function(_, State, Instant) SectionFrame.SetCollapsed(State, Instant) end
+			Section.IsCollapsed = function() return SectionFrame.IsCollapsed() end
 			Section.ScrollFrame = Tab.Container
 
 			setmetatable(Section, Elements)

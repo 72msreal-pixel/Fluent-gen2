@@ -6169,9 +6169,6 @@ ElementsTable.Dropdown = (function()
 			if useFixedY and windowRoot then
 				local windowY = windowRoot.AbsolutePosition.Y
 
-				-- Mép TRÊN của popup luôn nằm cố định ở 1 điểm neo (hàng sub-tab; nếu tab không có
-				-- sub-tab thì lấy mép trên vùng nội dung), bất kể ít hay nhiều mục.
-				-- Nhiều mục -> popup dài xuống dưới, ít mục / lọc search -> co lại về phía trên.
 				local anchorY
 				do
 					local anc = container
@@ -6198,7 +6195,6 @@ ElementsTable.Dropdown = (function()
 
 				targetY = anchorY
 
-				-- chỉ chống tràn khỏi màn hình (không còn bị đẩy lên theo đáy cửa sổ)
 				if targetY + canvasHeight > viewportHeight then
 					targetY = viewportHeight - canvasHeight - 5
 				end
@@ -8163,7 +8159,6 @@ function Library:IconLabel(Icon, Props, Children)
 	return Label
 end
 
--- ================= STATUS BAR (FPS | PING | PLAYER) =================
 local StatusBar = {
 	Frame = nil,
 	Labels = {},
@@ -8174,7 +8169,6 @@ local StatusBar = {
 	Drag = {},
 }
 
--- Đo chiều rộng chữ MỘT LẦN lúc dựng để đặt kích thước cố định cho thanh
 local function MeasureWidth(Text)
 	local Ok, Size = pcall(function()
 		return TextService:GetTextSize(Text, 13, Enum.Font.GothamMedium, Vector2.new(1000, 100))
@@ -8184,7 +8178,6 @@ end
 
 StatusBar.Items = {
 	{ Icon = "gauge", Sample = function() return "Fps: 60+" end, Get = function()
-		-- Tối đa hiển thị 60; vượt thì ghi "60+" để độ rộng luôn cố định
 		if StatusBar.Fps > 60 then return "Fps: 60+" end
 		return ("Fps: %d"):format(StatusBar.Fps)
 	end },
@@ -8194,7 +8187,6 @@ StatusBar.Items = {
 			Ok, Ping = pcall(function() return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() end)
 		end
 		local Value = Ok and Ping and math.floor(Ping + 0.5) or 0
-		-- Tối đa hiển thị 999; vượt thì ghi "999MS+"
 		if Value > 999 then return "999MS+" end
 		return ("%dMS"):format(Value)
 	end },
@@ -8206,7 +8198,6 @@ function StatusBar.Update()
 	for Index, Item in ipairs(StatusBar.Items) do
 		local Label = StatusBar.Labels[Index]
 		local Text = Item.Get()
-		-- Kích thước thanh là CỐ ĐỊNH (không co giãn) nên chỉ cần đổi chữ, không đụng layout.
 		if Label and Label.Text ~= Text then
 			Label.Text = Text
 		end
@@ -8232,12 +8223,8 @@ function StatusBar.Build(Config)
 	})
 	ProtectGui(StatusBar.Gui)
 
-	-- Mặc định nằm cùng hàng với thanh topbar của Roblox (góc phải, như ảnh mẫu).
-	-- Có thể ghi đè bằng Config.StatusBarPosition (UDim2, AnchorPoint = (1, 0.5)).
 	local function DefaultPosition()
 		local Inset = GuiService:GetGuiInset().Y
-		-- topbar mới (inset ~58): nút cao 44, cách mép trên 12 -> tâm = inset - 24
-		-- topbar cũ (inset ~36): tâm = inset / 2
 		local CenterY = (Inset >= 50) and (Inset - 24) or (Inset / 2)
 		return UDim2.new(1, -12, 0, CenterY)
 	end
@@ -8254,8 +8241,6 @@ function StatusBar.Build(Config)
 	})
 	StatusBar.Frame = Frame
 
-	-- Nền: dựng đúng các lớp của AcrylicPaint (cửa sổ chính) nhưng không có blur,
-	-- nên màu nhạt/trong y như UI gốc thay vì một khối màu đặc (trước đây bị đậm hơn).
 	Creator.New("Frame", {
 		Name = "Paint",
 		Size = UDim2.fromScale(1, 1),
@@ -8319,7 +8304,6 @@ function StatusBar.Build(Config)
 		}),
 	})
 
-	-- Nội dung (xếp ngang) nằm trên lớp nền
 	local Content = Creator.New("Frame", {
 		Name = "Content",
 		Size = UDim2.fromScale(1, 1),
@@ -8336,12 +8320,10 @@ function StatusBar.Build(Config)
 		}),
 	})
 
-	-- KÍCH THƯỚC CỐ ĐỊNH: không AutomaticSize, không đo AbsoluteContentSize.
-	-- Tổng rộng = padding 24 + (nhóm icon+chữ) + dấu "|" + icon UI (20) + khoảng cách 8 giữa các phần tử.
 	local LayoutPadding, GroupGap, IconSize = 8, 5, 16
 	local SepWidth = math.ceil(MeasureWidth("|")) + 1
-	local TotalWidth = 24 + 20 -- padding trái/phải + icon UI cuối thanh
-	local ChildCount = 1 -- icon UI
+	local TotalWidth = 24 + 20
+	local ChildCount = 1
 	for Index, Item in ipairs(StatusBar.Items) do
 		TotalWidth = TotalWidth + IconSize + GroupGap + math.ceil(MeasureWidth(Item.Sample and Item.Sample() or Item.Get())) + 1
 		ChildCount = ChildCount + 1
@@ -8386,15 +8368,13 @@ function StatusBar.Build(Config)
 		})
 		StatusBar.Labels[Index] = StatusBar.Text({
 			Size = UDim2.new(0, LabelWidth, 1, 0),
-			TextXAlignment = Enum.TextXAlignment.Center, -- số ngắn hơn mẫu -> tự chia đều khoảng trống 2 bên
+			TextXAlignment = Enum.TextXAlignment.Center,
 			LayoutOrder = 2,
 			Parent = Group,
 			ThemeTag = { TextColor3 = "Text" },
 		})
 	end
 
-	-- icon UI (cuối thanh): giống hệt icon ở nút Minimizer của UI chính
-	-- (icon ảnh -> giữ nguyên màu trắng, KHÔNG đổi theo theme; icon lucide -> màu "Text")
 	local IconValue = Config.StatusBarIcon or Config.Icon or "layout-dashboard"
 	local IsImageIcon = type(IconValue) == "number" or type(IconValue) == "table"
 		or (type(IconValue) == "string" and (
@@ -8416,9 +8396,6 @@ function StatusBar.Build(Config)
 		ThemeTag = (not IsImageIcon) and { ImageColor3 = "Text" } or nil,
 	}, IconChildren)
 
-	-- kéo thả (chuột + cảm ứng)
-	-- Chỉ theo dõi ĐÚNG ngón/chuột đã bấm vào thanh. Ngón khác (đang giữ joystick, UI khác...)
-	-- chạm/kéo thì bị bỏ qua nên thanh không còn bay sang ngón kia.
 	local Drag = StatusBar.Drag
 	local function IsPointer(Input)
 		return Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch
@@ -8430,7 +8407,7 @@ function StatusBar.Build(Config)
 	end
 	Creator.AddSignal(Frame.InputBegan, function(Input)
 		if not IsPointer(Input) then return end
-		if Drag.Active then return end -- đang kéo bằng ngón khác -> bỏ qua ngón mới
+		if Drag.Active then return end
 		Drag.Active, Drag.Input = true, Input
 		Drag.Start, Drag.Pos = Input.Position, Frame.Position
 		local Conn
@@ -8448,7 +8425,7 @@ function StatusBar.Build(Config)
 		if not Drag.Active then return end
 		local Tracked = Drag.Input
 		if Tracked.UserInputType == Enum.UserInputType.Touch then
-			if Input ~= Tracked then return end -- chỉ nhận đúng ngón đang kéo
+			if Input ~= Tracked then return end
 		elseif Input.UserInputType ~= Enum.UserInputType.MouseMovement then
 			return
 		end
@@ -8456,7 +8433,6 @@ function StatusBar.Build(Config)
 		Frame.Position = UDim2.new(Drag.Pos.X.Scale, Drag.Pos.X.Offset + Delta.X, Drag.Pos.Y.Scale, Drag.Pos.Y.Offset + Delta.Y)
 	end)
 
-	-- cập nhật FPS thật (đếm frame) + ping + số người chơi
 	Creator.AddSignal(RunService.Heartbeat, function(Dt)
 		if not Frame.Visible then return end
 		StatusBar.Frames = StatusBar.Frames + 1
@@ -8470,9 +8446,7 @@ function StatusBar.Build(Config)
 	StatusBar.Update()
 end
 
--- Bật/tắt thanh trạng thái: Library:SetStatusBar(true/false)
 function Library:SetStatusBar(Enabled, Config)
-	-- Nhớ Config lúc tạo UI (icon/vị trí) để toggle bật lại sau này vẫn dựng đúng
 	if Config then StatusBar.Config = Config end
 	if StatusBar.Frame and StatusBar.Frame.Parent then
 		StatusBar.Frame.Visible = Enabled and true or false
@@ -8482,11 +8456,9 @@ function Library:SetStatusBar(Enabled, Config)
 	end
 end
 
--- Trạng thái hiện tại của thanh (để toggle đồng bộ với Config.StatusBar lúc tạo UI)
 function Library:GetStatusBar()
 	return StatusBar.Frame ~= nil and StatusBar.Frame.Parent ~= nil and StatusBar.Frame.Visible
 end
--- ====================================================================
 
 local Elements = {}
 Elements.__index = Elements
@@ -8899,8 +8871,26 @@ local SaveManager = {} do
 	end
 
 
+	function SaveManager:Delete(name)
+		if (not name) then
+			return false, "no config file is selected"
+		end
 
+		local file = self.Folder .. "/" .. name .. ".json"
+		if not isfile(file) then return false, "invalid file" end
+		if type(delfile) ~= "function" then return false, "delfile is not supported by your executor" end
 
+		local success = pcall(delfile, file)
+		if not success then return false, "failed to delete file" end
+
+		local autoPath = self.Folder .. "/autoload.txt"
+		if isfile(autoPath) and readfile(autoPath) == name then
+			pcall(delfile, autoPath)
+			return true, true
+		end
+
+		return true, false
+	end
 
 	SaveManager.IgnoreThemeSettings = function(self)
 
@@ -9463,6 +9453,34 @@ local SaveManager = {} do
 
 
 
+		section:AddButton({Title = "Delete config", Description = "Delete the selected config", Callback = function()
+			local name = SaveManager.Options.SaveManager_ConfigList.Value
+
+			local success, result = self:Delete(name)
+			if not success then
+				return self.Library:Notify({
+					Title = "Interface",
+					Content = "Config loader",
+					SubContent = "Failed to delete config: " .. tostring(result),
+					Duration = 7
+				})
+			end
+
+			if result then
+				AutoloadButton:SetDesc("Current autoload config: none")
+			end
+
+			self.Library:Notify({
+				Title = "Interface",
+				Content = "Config loader",
+				SubContent = string.format("Deleted config %q", name),
+				Duration = 7
+			})
+
+			SaveManager.Options.SaveManager_ConfigList:SetValues(self:RefreshConfigList())
+			SaveManager.Options.SaveManager_ConfigList:SetValue(nil)
+		end})
+
 		SaveManager:SetIgnoreIndexes({ "SaveManager_ConfigList", "SaveManager_ConfigName" })
 
 
@@ -9808,13 +9826,10 @@ local InterfaceManager = {} do
 
 
 
-
-
-
 		section:AddToggle("StatusBarToggle", {
 			Title = "Status Bar",
 			Description = "Show or hide the FPS | Ping | Players bar.",
-			Default = Library:GetStatusBar(), -- đồng bộ với Config.StatusBar lúc tạo UI
+			Default = Library:GetStatusBar(),
 			Callback = function(Value)
 				Library:SetStatusBar(Value)
 			end

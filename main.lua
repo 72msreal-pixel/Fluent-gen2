@@ -17,6 +17,7 @@ local RunService = game:GetService("RunService")
 local LocalPlayer = game:GetService("Players").LocalPlayer
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local GuiService = game:GetService("GuiService")
 local TextService = game:GetService("TextService")
 local Camera = game:GetService("Workspace").CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
@@ -4306,8 +4307,19 @@ Components.Window = (function()
 
 		Window.AcrylicPaint = Acrylic.AcrylicPaint()
 
+		-- Kích thước vùng GUI thật (đã trừ thanh topbar của Roblox). Camera.ViewportSize còn tính cả phần này
+		-- nên căn giữa theo nó sẽ bị lệch xuống dưới.
+		local function GetScreenSize()
+			local size = GUI.AbsoluteSize
+			if size.X > 0 and size.Y > 0 then
+				return size
+			end
+			local topLeft = GuiService:GetGuiInset()
+			return Camera.ViewportSize - topLeft
+		end
+
 		local function CenterWindow()
-			local vp = Camera.ViewportSize
+			local vp = GetScreenSize()
 			local x = math.max(0, (vp.X - Window.Size.X.Offset) / 2)
 			local y = math.max(0, (vp.Y - Window.Size.Y.Offset) / 2)
 			Window.Position = UDim2.fromOffset(math.floor(x), math.floor(y))
@@ -4985,9 +4997,8 @@ Components.Window = (function()
 		}, rootChildren)
 
 		CenterWindow()
-		Creator.AddSignal(Camera:GetPropertyChangedSignal("ViewportSize"), function()
-			CenterWindow()
-		end)
+		Creator.AddSignal(Camera:GetPropertyChangedSignal("ViewportSize"), CenterWindow)
+		Creator.AddSignal(GUI:GetPropertyChangedSignal("AbsoluteSize"), CenterWindow)
 
 
 		Window.TitleBar = Components.TitleBar({
@@ -5235,8 +5246,8 @@ Components.Window = (function()
 			Value = Value and true or false
 			Window.Maximized = Value
 			Library:SetIcon(Window.TitleBar.MaxButton.Frame.Icon, Value and Components.Assets.Restore or Components.Assets.Max)
-			local SizeX = Value and Camera.ViewportSize.X or OldSizeX
-			local SizeY = Value and Camera.ViewportSize.Y or OldSizeY
+			local SizeX = Value and GetScreenSize().X or OldSizeX
+			local SizeY = Value and GetScreenSize().Y or OldSizeY
 			SizeMotor:setGoal({
 				X = Flipper[Instant and "Instant" or "Spring"].new(SizeX, { frequency = 6 }),
 				Y = Flipper[Instant and "Instant" or "Spring"].new(SizeY, { frequency = 6 }),

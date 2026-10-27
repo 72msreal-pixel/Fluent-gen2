@@ -4075,7 +4075,7 @@ Components.Window = (function()
 			CurrentPos = 0,
 			TabWidth = 0,
 			Position = UDim2.fromOffset(0, 0),
-			DropdownsOutsideWindow = Config.DropdownsOutsideWindow == true,
+			DropdownsOutsideWindow = Config.DropdownsOutsideWindow ~= false,
 		}
 
 		Library.Window = Window
@@ -5781,15 +5781,14 @@ ElementsTable.Dropdown = (function()
 			local padding = 3
 			local searchHeight = Dropdown.Search and 38 or 0
 			local innerMargins = 10
-			local estimatedContent = (visibleCount > 0) and (visibleCount * itemHeight + (visibleCount - 1) * padding + innerMargins + searchHeight) or (innerMargins + searchHeight)
-			local maxHeight = 392
-			local targetHeight = math.min(estimatedContent, maxHeight)
+			local MaxVisibleItems = 5
+			local shownCount = math.min(visibleCount, MaxVisibleItems)
+			local targetHeight = (shownCount > 0) and (shownCount * itemHeight + (shownCount - 1) * padding + innerMargins + searchHeight) or (innerMargins + searchHeight)
 			
 			local canvasWidth = math.max(170, ListSizeX > 0 and (ListSizeX + 20) or 170)
 			DropdownHolderCanvas.Size = UDim2.fromOffset(canvasWidth, targetHeight)
 			
-			local many = visibleCount > 10
-			DropdownHolderFrame.Size = UDim2.fromScale(1, many and (targetHeight / math.max(targetHeight, 1)) or 1)
+			DropdownHolderFrame.Size = UDim2.fromScale(1, 1)
 		end
 
 		local function RecalculateCanvasSize()

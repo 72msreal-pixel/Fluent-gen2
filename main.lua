@@ -5051,16 +5051,15 @@ Components.Window = (function()
 			UpdateContainerPosition()
 		end)
 
-		local OldSizeX
-		local OldSizeY
+		-- Kích thước "bình thường" (lúc chưa phóng to). Chỉ cập nhật khi khởi tạo
+		-- hoặc khi người dùng tự kéo resize xong; KHÔNG lấy từ Window.Size lúc bấm
+		-- nút vì lúc đó Window.Size có thể đang là giá trị giữa chừng của animation.
+		local OldSizeX = Window.Size.X.Offset
+		local OldSizeY = Window.Size.Y.Offset
 		Window.Maximize = function(Value, NoPos, Instant)
+			Value = Value and true or false
 			Window.Maximized = Value
 			Window.TitleBar.MaxButton.Frame.Icon.Image = Value and Components.Assets.Restore or Components.Assets.Max
-
-			if Value then
-				OldSizeX = Window.Size.X.Offset
-				OldSizeY = Window.Size.Y.Offset
-			end
 			local SizeX = Value and Camera.ViewportSize.X or OldSizeX
 			local SizeY = Value and Camera.ViewportSize.Y or OldSizeY
 			SizeMotor:setGoal({
@@ -5153,9 +5152,16 @@ Components.Window = (function()
 		end)
 
 		Creator.AddSignal(UserInputService.InputEnded, function(Input)
-			if Resizing == true or Input.UserInputType == Enum.UserInputType.Touch then
+			-- Trước đây mọi lần nhấc tay (Touch) đều ghi đè Window.Size bằng giá trị
+			-- animation đang chạy dở -> bấm phóng to/thu nhỏ liên tục làm hỏng size.
+			if Resizing == true then
 				Resizing = false
-				Window.Size = UDim2.fromOffset(SizeMotor:getValue().X, SizeMotor:getValue().Y)
+				local Value = SizeMotor:getValue()
+				Window.Size = UDim2.fromOffset(Value.X, Value.Y)
+				if not Window.Maximized then
+					OldSizeX = Value.X
+					OldSizeY = Value.Y
+				end
 			end
 		end)
 
@@ -6471,6 +6477,8 @@ ElementsTable.Slider = (function()
 		}
 
 		local Dragging = false
+		local DragInput = nil
+		local ScrollFrame = self.ScrollFrame
 
 		local SliderFrame = Components.Element(Config.Title, Config.Description, self.Container, false, Config)
 		SliderFrame.DescLabel.Size = UDim2.new(1, -170, 0, 14)
@@ -6596,7 +6604,19 @@ ElementsTable.Slider = (function()
 			return math.max(minWidth, math.min(maxWidth, textSize.X + padding))
 		end
 
+		local lastWidthText = nil
+
 		local function updateInputWidth(text, animate)
+			-- Cùng nội dung thì không tính lại (tránh GetTextSize + tween mỗi frame khi kéo)
+			if text == lastWidthText then
+				return
+			end
+			lastWidthText = text
+
+			if Dragging then
+				animate = false
+			end
+
 			if currentWidthTween then
 				currentWidthTween:Cancel()
 				currentWidthTween = nil
@@ -6606,12 +6626,15 @@ ElementsTable.Slider = (function()
 			local currentWidth = SliderInput.Size.X.Offset
 
 			if animate and math.abs(targetWidth - currentWidth) > 0.5 then
-				currentWidthTween = TweenService:Create(SliderInput, TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				local Tween = TweenService:Create(SliderInput, TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
 					Size = UDim2.new(0, targetWidth, 0, 14)
 				})
-				currentWidthTween:Play()
-				currentWidthTween.Completed:Connect(function()
-					currentWidthTween = nil
+				currentWidthTween = Tween
+				Tween:Play()
+				Tween.Completed:Connect(function()
+					if currentWidthTween == Tween then
+						currentWidthTween = nil
+					end
 				end)
 			else
 				SliderInput.Size = UDim2.new(0, targetWidth, 0, 14)
@@ -6655,8 +6678,10 @@ ElementsTable.Slider = (function()
 				}):Play()
 
 				task.wait(0.2)
-				SliderDisplay.Visible = true
-				inputVisible = false
+				if not isHovering and not SliderInput:IsFocused() then
+					SliderDisplay.Visible = true
+					inputVisible = false
+				end
 			end
 		end)
 
@@ -6706,8 +6731,10 @@ ElementsTable.Slider = (function()
 				}):Play()
 
 				task.wait(0.2)
-				SliderDisplay.Visible = true
-				inputVisible = false
+				if not isHovering and not SliderInput:IsFocused() then
+					SliderDisplay.Visible = true
+					inputVisible = false
+				end
 			end
 		end)
 
@@ -6716,9 +6743,50 @@ ElementsTable.Slider = (function()
 			updateInputWidth(tostring(Slider.Value), false)
 		end)
 
+		local function SetScrollLock(Locked)
+			if ScrollFrame and ScrollFrame.Parent then
+				ScrollFrame.ScrollingEnabled = not Locked
+			end
+		end
+
+		local function StopDrag()
+			Dragging = false
+			DragInput = nil
+			SetScrollLock(false)
+		end
+
+		local function StartDrag(Input)
+			Dragging = true
+			DragInput = Input
+			-- Khoá cuộn dọc của tab trong lúc kéo để không bị giành touch
+			SetScrollLock(true)
+
+			Input.Changed:Connect(function()
+				if Input.UserInputState == Enum.UserInputState.End and DragInput == Input then
+					StopDrag()
+				end
+			end)
+		end
+
+		local function DragTo(PositionX)
+			local Width = SliderRail.AbsoluteSize.X
+			if Width <= 0 then
+				return
+			end
+			local SizeScale = math.clamp((PositionX - SliderRail.AbsolutePosition.X) / Width, 0, 1)
+			local NewValue = Library:Round(
+				math.clamp(Slider.Min + ((Slider.Max - Slider.Min) * SizeScale), Slider.Min, Slider.Max),
+				Slider.Rounding
+			)
+			-- Giá trị không đổi thì khỏi gọi lại callback (đỡ giật khi callback nặng)
+			if NewValue ~= Slider.Value then
+				Slider:SetValue(NewValue)
+			end
+		end
+
 		Creator.AddSignal(SliderInput.InputBegan, function(Input)
 			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-				Dragging = false
+				StopDrag()
 			end
 		end)
 
@@ -6727,46 +6795,57 @@ ElementsTable.Slider = (function()
 				Input.UserInputType == Enum.UserInputType.MouseButton1
 				or Input.UserInputType == Enum.UserInputType.Touch
 			then
-				Dragging = true
+				StartDrag(Input)
 			end
 		end)
 
 		Creator.AddSignal(SliderDot.InputEnded, function(Input)
-			if
-				Input.UserInputType == Enum.UserInputType.MouseButton1
-				or Input.UserInputType == Enum.UserInputType.Touch
-			then
-				Dragging = false
+			if Input == DragInput then
+				StopDrag()
 			end
 		end)
 
 		Creator.AddSignal(UserInputService.InputChanged, function(Input)
-			if Dragging then
-				local position = nil
-				if Input.UserInputType == Enum.UserInputType.MouseMovement then
-					position = Input.Position
-				elseif Input.UserInputType == Enum.UserInputType.Touch then
-					position = Input.Position
-				end
+			if not Dragging or not DragInput then
+				return
+			end
 
-				if position then
-					local SizeScale = math.clamp((position.X - SliderRail.AbsolutePosition.X) / SliderRail.AbsoluteSize.X, 0, 1)
-					Slider:SetValue(Slider.Min + ((Slider.Max - Slider.Min) * SizeScale))
+			if Input.UserInputType == Enum.UserInputType.MouseMovement then
+				if DragInput.UserInputType == Enum.UserInputType.MouseButton1 then
+					DragTo(Input.Position.X)
 				end
+			elseif Input.UserInputType == Enum.UserInputType.Touch and Input == DragInput then
+				DragTo(Input.Position.X)
+			end
+		end)
+
+		-- Chốt chặn: nhả chuột/nhấc tay ở BẤT KỲ đâu cũng dừng kéo (hết bị kẹt)
+		Creator.AddSignal(UserInputService.InputEnded, function(Input)
+			if not Dragging then
+				return
+			end
+			if
+				Input == DragInput
+				or (
+					DragInput
+					and DragInput.UserInputType == Enum.UserInputType.MouseButton1
+					and Input.UserInputType == Enum.UserInputType.MouseButton1
+				)
+			then
+				StopDrag()
 			end
 		end)
 
 		Creator.AddSignal(SliderRail.InputBegan, function(Input)
 			if Input.UserInputType == Enum.UserInputType.Touch then
-				Dragging = true
-				local SizeScale = math.clamp((Input.Position.X - SliderRail.AbsolutePosition.X) / SliderRail.AbsoluteSize.X, 0, 1)
-				Slider:SetValue(Slider.Min + ((Slider.Max - Slider.Min) * SizeScale))
+				StartDrag(Input)
+				DragTo(Input.Position.X)
 			end
 		end)
 
 		Creator.AddSignal(SliderRail.InputEnded, function(Input)
-			if Input.UserInputType == Enum.UserInputType.Touch then
-				Dragging = false
+			if Input == DragInput then
+				StopDrag()
 			end
 		end)
 
@@ -6783,7 +6862,7 @@ ElementsTable.Slider = (function()
 
 			if inputVisible or SliderInput:IsFocused() then
 				SliderInput.Text = tostring(self.Value)
-				updateInputWidth(tostring(self.Value), not SliderInput:IsFocused())
+				updateInputWidth(tostring(self.Value), not SliderInput:IsFocused() and not Dragging)
 			end
 			if not inputVisible and not SliderInput:IsFocused() then
 				SliderInput.Text = tostring(self.Value)
@@ -6794,6 +6873,7 @@ ElementsTable.Slider = (function()
 		end
 
 		function Slider:Destroy()
+			StopDrag()
 			SliderFrame:Destroy()
 			Library.Options[Idx] = nil
 		end

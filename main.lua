@@ -2848,7 +2848,7 @@ Components.Tab = (function()
 		}, {
 			ContainerLayout,
 			New("UIPadding", {
-				PaddingRight = UDim.new(0, 6),
+				PaddingRight = UDim.new(0, 10),
 				PaddingLeft = UDim.new(0, 1),
 				PaddingTop = UDim.new(0, 1),
 				PaddingBottom = UDim.new(0, 1),
@@ -2945,7 +2945,7 @@ Components.Tab = (function()
 				-- Đường kẻ phân cách dưới hàng tab con
 				New("Frame", {
 					Name = "SubTabDivider",
-					Size = UDim2.new(1, -2, 0, 1),
+					Size = UDim2.new(1, -6, 0, 1),
 					Position = UDim2.fromOffset(1, 48),
 					BackgroundTransparency = 0.88,
 					BorderSizePixel = 0,
@@ -2956,7 +2956,7 @@ Components.Tab = (function()
 				})
 
 				local SubTabContainerHolder = New("Frame", {
-					Size = UDim2.new(1, -2, 1, -60),
+					Size = UDim2.new(1, -6, 1, -60),
 					Position = UDim2.fromOffset(1, 52),
 					BackgroundTransparency = 1,
 					ClipsDescendants = true,

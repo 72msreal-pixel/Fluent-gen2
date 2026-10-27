@@ -8472,12 +8472,19 @@ end
 
 -- Bật/tắt thanh trạng thái: Library:SetStatusBar(true/false)
 function Library:SetStatusBar(Enabled, Config)
+	-- Nhớ Config lúc tạo UI (icon/vị trí) để toggle bật lại sau này vẫn dựng đúng
+	if Config then StatusBar.Config = Config end
 	if StatusBar.Frame and StatusBar.Frame.Parent then
 		StatusBar.Frame.Visible = Enabled and true or false
 		if Enabled then StatusBar.Update() end
 	elseif Enabled then
-		StatusBar.Build(Config or {})
+		StatusBar.Build(Config or StatusBar.Config or {})
 	end
+end
+
+-- Trạng thái hiện tại của thanh (để toggle đồng bộ với Config.StatusBar lúc tạo UI)
+function Library:GetStatusBar()
+	return StatusBar.Frame ~= nil and StatusBar.Frame.Parent ~= nil and StatusBar.Frame.Visible
 end
 -- ====================================================================
 
@@ -9803,6 +9810,15 @@ local InterfaceManager = {} do
 
 
 
+
+		section:AddToggle("StatusBarToggle", {
+			Title = "Status Bar",
+			Description = "Show or hide the FPS | Ping | Players bar.",
+			Default = Library:GetStatusBar(), -- đồng bộ với Config.StatusBar lúc tạo UI
+			Callback = function(Value)
+				Library:SetStatusBar(Value)
+			end
+		})
 
 		local MenuKeybind = section:AddKeybind("MenuKeybind", { Title = "Minimize Bind", Default = Library.MinimizeKey.Name or Settings.MenuKeybind })
 

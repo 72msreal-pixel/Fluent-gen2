@@ -4676,38 +4676,94 @@ Components.Window = (function()
 		}
 
 		if Window.Compact then
-			local SEARCH_W = 200
+			local SEARCH_W = 170 -- độ rộng thanh nhập
+			local BAR_H = 34
+			local GAP = 8 -- khoảng cách giữa thanh nhập và mép ui
+			local PAD = 3 -- chừa viền cho khung cắt để UIStroke không bị cắt
 			local SearchOpen = false
 			local LastClosed = 0
-			local SlideInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+			local SlideInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 			SearchIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
 
-			-- Bố cục khi mở: [thanh nhập] | icon tìm | ui lib
-			-- Thanh nhập nằm trong khung cắt ngay bên TRÁI icon (ra ngoài mép ui), trượt từ sau icon sang trái; không đè lên ui
+			-- Thanh nhập trượt từ mép trái của ui ra BÊN NGOÀI ui (không đè lên ui)
+			-- Khung cắt: từ [mép trái ui - GAP - rộng] đến [mép trái ui]; thanh chạy trong khung này từ phải sang trái
 			local SearchClip = New("Frame", {
-				Size = UDim2.fromOffset(0, 28),
 				BackgroundTransparency = 1,
 				ClipsDescendants = true,
 				Visible = false,
-				ZIndex = 12,
+				ZIndex = 20,
 			})
 			local SearchBar = New("Frame", {
-				Size = UDim2.new(0, SEARCH_W, 1, 0),
-				Position = UDim2.fromOffset(SEARCH_W, 0),
-				BackgroundTransparency = 0.7,
-				ZIndex = 12,
+				Size = UDim2.new(0, SEARCH_W, 0, BAR_H),
+				BackgroundTransparency = 0.12,
+				ZIndex = 20,
 				Parent = SearchClip,
 				ThemeTag = {
-					BackgroundColor3 = "Element",
+					BackgroundColor3 = "AcrylicMain",
 				},
 			}, {
 				New("UICorner", {
-					CornerRadius = UDim.new(0, 4),
+					CornerRadius = UDim.new(0, 10),
+				}),
+				New("UIStroke", {
+					Thickness = 1,
+					Transparency = 0.45,
+					ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+					ThemeTag = {
+						Color = "AcrylicBorder",
+					},
 				}),
 			})
+
+			Library:IconLabel("search", {
+				Size = UDim2.fromOffset(15, 15),
+				AnchorPoint = Vector2.new(0, 0.5),
+				Position = UDim2.new(0, 11, 0.5, 0),
+				BackgroundTransparency = 1,
+				ImageTransparency = 0.25,
+				ZIndex = 21,
+				Parent = SearchBar,
+				ThemeTag = {
+					ImageColor3 = "SubText",
+				},
+			})
+
 			SearchInput.Parent = SearchBar
-			SearchInput.Size = UDim2.new(1, -16, 1, 0)
-			SearchInput.Position = UDim2.fromOffset(8, 0)
+			SearchInput.Size = UDim2.new(1, -62, 1, 0)
+			SearchInput.Position = UDim2.fromOffset(34, 0)
+			SearchInput.TextSize = 14
+			SearchInput.ZIndex = 21
+
+			-- nút xoá nhanh, chỉ hiện khi đang có chữ
+			local ClearButton = New("TextButton", {
+				Size = UDim2.fromOffset(22, 22),
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, -7, 0.5, 0),
+				BackgroundTransparency = 1,
+				Text = "",
+				Visible = false,
+				ZIndex = 22,
+				Parent = SearchBar,
+			}, {
+				Library:IconLabel("x", {
+					Size = UDim2.fromOffset(14, 14),
+					AnchorPoint = Vector2.new(0.5, 0.5),
+					Position = UDim2.fromScale(0.5, 0.5),
+					BackgroundTransparency = 1,
+					ImageTransparency = 0.2,
+					ZIndex = 22,
+					ThemeTag = {
+						ImageColor3 = "SubText",
+					},
+				}),
+			})
+			Creator.AddSignal(SearchInput:GetPropertyChangedSignal("Text"), function()
+				ClearButton.Visible = SearchInput.Text ~= ""
+			end)
+			Creator.AddSignal(ClearButton.MouseButton1Click, function()
+				SearchInput.Text = ""
+				SearchInput:CaptureFocus()
+			end)
 
 			local SearchButton = New("TextButton", {
 				Size = UDim2.fromScale(1, 1),
@@ -4723,28 +4779,28 @@ Components.Window = (function()
 				end
 				SearchOpen = State
 
-				if not State then
-					LastClosed = os.clock()
-				end
+				TweenService:Create(SearchFrame, SlideInfo, { BackgroundTransparency = State and 0.45 or 0.7 }):Play()
 
 				if State then
-					-- đặt ngay bên trái icon tìm kiếm (cạnh phải của khung cắt sát icon)
 					local Root = Window.Root
-					local Width = math.clamp(SearchFrame.AbsolutePosition.X - 6, 60, SEARCH_W) -- không tràn ra khỏi màn hình
+					local Width = math.clamp(Root.AbsolutePosition.X - GAP - 6, 90, SEARCH_W) -- không tràn ra khỏi màn hình
+					local Travel = Width + GAP
 					SearchClip.Parent = Root
-					SearchClip.Size = UDim2.fromOffset(Width, 28)
+					SearchClip.Size = UDim2.fromOffset(Travel, BAR_H + PAD * 2)
+					-- đặt sát mép trái ui, canh giữa theo icon tìm kiếm
 					SearchClip.Position = UDim2.fromOffset(
-						SearchFrame.AbsolutePosition.X - Root.AbsolutePosition.X - 6 - Width,
-						SearchFrame.AbsolutePosition.Y - Root.AbsolutePosition.Y
+						-Travel,
+						SearchFrame.AbsolutePosition.Y - Root.AbsolutePosition.Y + SearchFrame.AbsoluteSize.Y / 2 - (BAR_H + PAD * 2) / 2
 					)
-					SearchBar.Size = UDim2.new(1, 0, 1, 0)
-					SearchBar.Position = UDim2.fromOffset(Width, 0)
+					SearchBar.Size = UDim2.new(0, Width, 0, BAR_H)
+					SearchBar.Position = UDim2.fromOffset(Travel, PAD) -- bắt đầu ẩn phía sau mép ui
 					SearchClip.Visible = true
-					TweenService:Create(SearchBar, SlideInfo, { Position = UDim2.fromOffset(0, 0) }):Play()
+					TweenService:Create(SearchBar, SlideInfo, { Position = UDim2.fromOffset(0, PAD) }):Play()
 					SearchInput:CaptureFocus()
 				else
+					LastClosed = os.clock()
 					SearchInput:ReleaseFocus()
-					local Tween = TweenService:Create(SearchBar, SlideInfo, { Position = UDim2.fromOffset(SearchClip.AbsoluteSize.X, 0) })
+					local Tween = TweenService:Create(SearchBar, SlideInfo, { Position = UDim2.fromOffset(SearchClip.AbsoluteSize.X, PAD) })
 					Tween.Completed:Connect(function()
 						if not SearchOpen then
 							SearchClip.Visible = false

@@ -9691,6 +9691,29 @@ end
 
 
 
+local function GetPixelPosition(Frame)
+	local parent = Frame.Parent
+	local size = (parent and parent:IsA("GuiBase2d")) and parent.AbsoluteSize or workspace.CurrentCamera.ViewportSize
+	local pos = Frame.Position
+	return UDim2.fromOffset(pos.X.Scale * size.X + pos.X.Offset, pos.Y.Scale * size.Y + pos.Y.Offset)
+end
+
+local function GetParentSize(Frame)
+	local parent = Frame.Parent
+	if parent and parent:IsA("GuiBase2d") and parent.AbsoluteSize.X > 0 then
+		return parent.AbsoluteSize
+	end
+	return workspace.CurrentCamera.ViewportSize
+end
+
+local function GetPointerPosition(Input)
+	if Input and Input.UserInputType == Enum.UserInputType.Touch then
+		return Vector2.new(Input.Position.X, Input.Position.Y)
+	end
+	local Mouse = game:GetService("Players").LocalPlayer:GetMouse()
+	return Vector2.new(Mouse.X, Mouse.Y)
+end
+
 function Library:CreateMinimizer(Config)
 
 
@@ -10015,12 +10038,7 @@ function Library:CreateMinimizer(Config)
 		local isDragging = false
 
 
-		local dragStart, dragOffset
-
-
-
-
-
+		local dragStart, dragOffset, dragInput, didDrag
 		if draggableWhole then
 
 
@@ -10033,13 +10051,12 @@ function Library:CreateMinimizer(Config)
 					isDragging = true
 
 
-					local pos = Input.Position
+					dragInput = Input
+					didDrag = false
+					dragStart = GetPointerPosition(Input)
 
 
-					dragStart = Vector2.new(pos.X, pos.Y)
-
-
-					dragOffset = holder.Position
+					dragOffset = GetPixelPosition(holder)
 
 
 					local conn
@@ -10060,6 +10077,7 @@ function Library:CreateMinimizer(Config)
 							dragOffset = nil
 
 
+							dragInput = nil
 							conn:Disconnect()
 
 
@@ -10084,13 +10102,8 @@ function Library:CreateMinimizer(Config)
 				if isDragging and dragStart and dragOffset and holder and holder.Parent then
 
 
-					local mouse = LocalPlayer:GetMouse()
-
-
-					local current = Vector2.new(mouse.X, mouse.Y)
-
-
-					local delta = current - dragStart
+					local delta = GetPointerPosition(dragInput) - dragStart
+					if delta.Magnitude > 6 then didDrag = true end
 
 
 					local newX = dragOffset.X.Offset + delta.X
@@ -10099,7 +10112,7 @@ function Library:CreateMinimizer(Config)
 					local newY = dragOffset.Y.Offset + delta.Y
 
 
-					local viewport = workspace.Camera.ViewportSize
+					local viewport = GetParentSize(holder)
 
 
 					local size = holder.AbsoluteSize
@@ -10138,7 +10151,7 @@ function Library:CreateMinimizer(Config)
 			task.wait(0.1)
 
 
-			if not isDragging and Library.Window then
+			if not isDragging and not didDrag and Library.Window then
 
 
 				Library.Window:Minimize()
@@ -10763,10 +10776,8 @@ local dragStart = nil
 
 
 local dragOffset = nil
-
-
-
-
+local dragInput = nil
+local didDrag = false
 
 Creator.AddSignal(MinimizeButton.InputBegan, function(Input)
 
@@ -10777,10 +10788,12 @@ Creator.AddSignal(MinimizeButton.InputBegan, function(Input)
 		isDragging = true
 
 
-		dragStart = Vector2.new(Input.Position.X, Input.Position.Y)
+		dragInput = Input
+		didDrag = false
+		dragStart = GetPointerPosition(Input)
 
 
-		dragOffset = (Library.Minimizer or Minimizer).Position
+		dragOffset = GetPixelPosition(Library.Minimizer or Minimizer)
 
 
 
@@ -10804,6 +10817,7 @@ Creator.AddSignal(MinimizeButton.InputBegan, function(Input)
 				dragOffset = nil
 
 
+				dragInput = nil
 				connection:Disconnect()
 
 
@@ -10831,10 +10845,12 @@ Creator.AddSignal(MobileMinimizeButton.InputBegan, function(Input)
 		isDragging = true
 
 
-		dragStart = Vector2.new(Input.Position.X, Input.Position.Y)
+		dragInput = Input
+		didDrag = false
+		dragStart = GetPointerPosition(Input)
 
 
-		dragOffset = (Library.Minimizer or Minimizer).Position
+		dragOffset = GetPixelPosition(Library.Minimizer or Minimizer)
 
 
 		local connection
@@ -10855,6 +10871,7 @@ Creator.AddSignal(MobileMinimizeButton.InputBegan, function(Input)
 				dragOffset = nil
 
 
+				dragInput = nil
 				connection:Disconnect()
 
 
@@ -10894,13 +10911,8 @@ Creator.AddSignal(RunService.Heartbeat, function()
 		end
 
 
-		local Mouse = game:GetService("Players").LocalPlayer:GetMouse()
-
-
-		local currentMousePos = Vector2.new(Mouse.X, Mouse.Y)
-
-
-		local delta = currentMousePos - dragStart
+		local delta = GetPointerPosition(dragInput) - dragStart
+		if delta.Magnitude > 6 then didDrag = true end
 
 
 		local newX = dragOffset.X.Offset + delta.X
@@ -10909,7 +10921,7 @@ Creator.AddSignal(RunService.Heartbeat, function()
 		local newY = dragOffset.Y.Offset + delta.Y
 
 
-		local viewportSize = workspace.Camera.ViewportSize
+		local viewportSize = GetParentSize(activeMin)
 
 
 		local minimizerSize = activeMin.AbsoluteSize
@@ -10960,7 +10972,7 @@ AddSignal(MinimizeButton.MouseButton1Click, function()
 	task.wait(0.1)
 
 
-	if not isDragging then
+	if not isDragging and not didDrag then
 
 
 		Library.Window:Minimize()
@@ -10981,7 +10993,7 @@ AddSignal(MobileMinimizeButton.MouseButton1Click, function()
 	task.wait(0.1)
 
 
-	if not isDragging then
+	if not isDragging and not didDrag then
 
 
 		Library.Window:Minimize()

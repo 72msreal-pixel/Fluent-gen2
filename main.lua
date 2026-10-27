@@ -2969,6 +2969,14 @@ Components.Tab = (function()
 			self.SubTabCount = self.SubTabCount + 1
 			local SubTabIndex = self.SubTabCount
 
+			local function SubTabRest()
+				return Window.Compact and 1 or 0.92
+			end
+
+			local function SubTabHover()
+				return Window.Compact and 0.93 or 0.87
+			end
+
 			if not self.SubTabHolder then
 				local SubTabListLayout = New("UIListLayout", {
 					Padding = UDim.new(0, 6),
@@ -3040,7 +3048,7 @@ Components.Tab = (function()
 			local SubTabButton = New("TextButton", {
 				Size = UDim2.new(0, 0, 0, 32),
 				AutomaticSize = Enum.AutomaticSize.X,
-				BackgroundTransparency = 0.92,
+				BackgroundTransparency = SubTabRest(),
 				Parent = self.SubTabHolder,
 				Text = "",
 				ThemeTag = {
@@ -3154,7 +3162,7 @@ Components.Tab = (function()
 				end
 			end)
 
-			local SubTabMotor, SubTabSetTransparency = Creator.SpringMotor(0.92, SubTabButton, "BackgroundTransparency")
+			local SubTabMotor, SubTabSetTransparency = Creator.SpringMotor(SubTabRest(), SubTabButton, "BackgroundTransparency")
 			local SubTabStroke = SubTabButton:FindFirstChild("UIStroke")
 
 			local function UpdateSubTabAppearance()
@@ -3164,7 +3172,7 @@ Components.Tab = (function()
 						SubTabStroke.Transparency = 0
 					end
 				else
-					SubTabSetTransparency(0.92)
+					SubTabSetTransparency(SubTabRest())
 					if SubTabStroke then
 						SubTabStroke.Transparency = 1
 					end
@@ -3173,7 +3181,7 @@ Components.Tab = (function()
 
 			Creator.AddSignal(SubTabButton.MouseEnter, function()
 				if self.SelectedSubTab ~= SubTabIndex then
-					SubTabSetTransparency(0.87)
+					SubTabSetTransparency(SubTabHover())
 				end
 			end)
 
@@ -3182,7 +3190,7 @@ Components.Tab = (function()
 			end)
 
 			Creator.AddSignal(SubTabButton.MouseButton1Down, function()
-				SubTabSetTransparency(0.92)
+				SubTabSetTransparency(SubTabRest())
 			end)
 
 			Creator.AddSignal(SubTabButton.MouseButton1Up, function()
@@ -3256,7 +3264,7 @@ Components.Tab = (function()
 						SubTabStroke.Transparency = 0
 					end
 				else
-					SubTabObj.SetTransparency(0.92)
+					SubTabObj.SetTransparency(Window.Compact and 1 or 0.92)
 					if SubTabStroke then
 						SubTabStroke.Transparency = 1
 					end

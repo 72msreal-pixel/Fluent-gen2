@@ -8211,20 +8211,101 @@ function StatusBar.Build(Config)
 	})
 	ProtectGui(StatusBar.Gui)
 
+	-- Mặc định nằm cùng hàng với thanh topbar của Roblox (góc phải, như ảnh mẫu).
+	-- Có thể ghi đè bằng Config.StatusBarPosition (UDim2, AnchorPoint = (1, 0.5)).
+	local function DefaultPosition()
+		local Inset = GuiService:GetGuiInset().Y
+		-- topbar mới (inset ~58): nút cao 44, cách mép trên 12 -> tâm = inset - 24
+		-- topbar cũ (inset ~36): tâm = inset / 2
+		local CenterY = (Inset >= 50) and (Inset - 24) or (Inset / 2)
+		return UDim2.new(1, -12, 0, CenterY)
+	end
+
 	local Frame = Creator.New("Frame", {
 		Name = "StatusBar",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -12, 0, GuiService:GetGuiInset().Y + 8),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = Config.StatusBarPosition or DefaultPosition(),
 		Size = UDim2.fromOffset(0, 32),
-		AutomaticSize = Enum.AutomaticSize.X,
-		BackgroundTransparency = 0.1,
+		BackgroundTransparency = 1,
 		ZIndex = 50,
 		Active = true,
 		Parent = StatusBar.Gui,
-		ThemeTag = { BackgroundColor3 = "AcrylicMain" },
+	})
+	StatusBar.Frame = Frame
+
+	-- Nền: dựng đúng các lớp của AcrylicPaint (cửa sổ chính) nhưng không có blur,
+	-- nên màu nhạt/trong y như UI gốc thay vì một khối màu đặc (trước đây bị đậm hơn).
+	Creator.New("Frame", {
+		Name = "Paint",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 0.9,
+		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+		BorderSizePixel = 0,
+		ZIndex = 1,
+		Parent = Frame,
 	}, {
 		Creator.New("UICorner", { CornerRadius = UDim.new(0, 8) }),
-		Creator.New("UIStroke", { Thickness = 1, ThemeTag = { Color = "AcrylicBorder" } }),
+		Creator.New("Frame", {
+			Name = "Background",
+			BackgroundTransparency = 0.45,
+			Size = UDim2.fromScale(1, 1),
+			BorderSizePixel = 0,
+			ThemeTag = { BackgroundColor3 = "AcrylicMain" },
+		}, {
+			Creator.New("UICorner", { CornerRadius = UDim.new(0, 8) }),
+		}),
+		Creator.New("Frame", {
+			BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+			BackgroundTransparency = 0.4,
+			Size = UDim2.fromScale(1, 1),
+			BorderSizePixel = 0,
+		}, {
+			Creator.New("UICorner", { CornerRadius = UDim.new(0, 8) }),
+			Creator.New("UIGradient", { Rotation = 90, ThemeTag = { Color = "AcrylicGradient" } }),
+		}),
+		Creator.New("ImageLabel", {
+			Image = "rbxassetid://9968344105",
+			ImageTransparency = 0.98,
+			ScaleType = Enum.ScaleType.Tile,
+			TileSize = UDim2.new(0, 128, 0, 128),
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+		}, {
+			Creator.New("UICorner", { CornerRadius = UDim.new(0, 8) }),
+		}),
+		Creator.New("ImageLabel", {
+			Image = "rbxassetid://9968344227",
+			ImageTransparency = 0.9,
+			ScaleType = Enum.ScaleType.Tile,
+			TileSize = UDim2.new(0, 128, 0, 128),
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+			ThemeTag = { ImageTransparency = "AcrylicNoise" },
+		}, {
+			Creator.New("UICorner", { CornerRadius = UDim.new(0, 8) }),
+		}),
+		Creator.New("Frame", {
+			BackgroundTransparency = 1,
+			Size = UDim2.fromScale(1, 1),
+			ZIndex = 2,
+		}, {
+			Creator.New("UICorner", { CornerRadius = UDim.new(0, 8) }),
+			Creator.New("UIStroke", {
+				Transparency = 0.5,
+				Thickness = 1,
+				ThemeTag = { Color = "AcrylicBorder" },
+			}),
+		}),
+	})
+
+	-- Nội dung (xếp ngang) nằm trên lớp nền
+	local Content = Creator.New("Frame", {
+		Name = "Content",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		ZIndex = 2,
+		Parent = Frame,
+	}, {
 		Creator.New("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) }),
 		Creator.New("UIListLayout", {
 			FillDirection = Enum.FillDirection.Horizontal,
@@ -8233,14 +8314,21 @@ function StatusBar.Build(Config)
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		}),
 	})
-	StatusBar.Frame = Frame
+
+	-- Chiều rộng thanh tự co giãn theo nội dung (12 + 12 padding)
+	local Layout = Content:FindFirstChildOfClass("UIListLayout")
+	local function Resize()
+		Frame.Size = UDim2.fromOffset(Layout.AbsoluteContentSize.X + 24, 32)
+	end
+	Creator.AddSignal(Layout:GetPropertyChangedSignal("AbsoluteContentSize"), Resize)
+	Resize()
 
 	for Index, Item in ipairs(StatusBar.Items) do
 		if Index > 1 then
 			StatusBar.Text({
 				Text = "|",
 				LayoutOrder = Index * 2 - 2,
-				Parent = Frame,
+				Parent = Content,
 				ThemeTag = { TextColor3 = "SubText" },
 			})
 		end
@@ -8249,7 +8337,7 @@ function StatusBar.Build(Config)
 			AutomaticSize = Enum.AutomaticSize.X,
 			Size = UDim2.new(0, 0, 1, 0),
 			LayoutOrder = Index * 2 - 1,
-			Parent = Frame,
+			Parent = Content,
 		}, {
 			Creator.New("UIListLayout", {
 				FillDirection = Enum.FillDirection.Horizontal,
@@ -8272,30 +8360,65 @@ function StatusBar.Build(Config)
 		})
 	end
 
-	-- icon UI (cuối thanh)
-	Library:IconLabel(Config.StatusBarIcon or Config.Icon or "layout-dashboard", {
-		Size = UDim2.fromOffset(18, 18),
+	-- icon UI (cuối thanh): giống hệt icon ở nút Minimizer của UI chính
+	-- (icon ảnh -> giữ nguyên màu trắng, KHÔNG đổi theo theme; icon lucide -> màu "Text")
+	local IconValue = Config.StatusBarIcon or Config.Icon or "layout-dashboard"
+	local IsImageIcon = type(IconValue) == "number" or type(IconValue) == "table"
+		or (type(IconValue) == "string" and (
+			IconValue:match("^rbxassetid://") ~= nil or IconValue:match("^rbxasset://") ~= nil
+			or IconValue:match("^%d+$") ~= nil or IconValue:match("^https?://") ~= nil
+		))
+	local IconChildren = {}
+	if IsImageIcon then
+		table.insert(IconChildren, Creator.New("UICorner", { CornerRadius = UDim.new(0, 6) }))
+	end
+	Library:IconLabel(IconValue, {
+		Name = "UIIcon",
+		Size = UDim2.fromOffset(20, 20),
 		BackgroundTransparency = 1,
 		LayoutOrder = 100,
-		Parent = Frame,
-		ThemeTag = { ImageColor3 = "Accent" },
-	})
+		ImageColor3 = Color3.new(1, 1, 1),
+		ScaleType = IsImageIcon and Enum.ScaleType.Crop or Enum.ScaleType.Stretch,
+		Parent = Content,
+		ThemeTag = (not IsImageIcon) and { ImageColor3 = "Text" } or nil,
+	}, IconChildren)
 
 	-- kéo thả (chuột + cảm ứng)
+	-- Chỉ theo dõi ĐÚNG ngón/chuột đã bấm vào thanh. Ngón khác (đang giữ joystick, UI khác...)
+	-- chạm/kéo thì bị bỏ qua nên thanh không còn bay sang ngón kia.
 	local Drag = StatusBar.Drag
 	local function IsPointer(Input)
 		return Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch
 	end
+	local function StopDrag(Input)
+		if Drag.Input == Input then
+			Drag.Active, Drag.Input = false, nil
+		end
+	end
 	Creator.AddSignal(Frame.InputBegan, function(Input)
 		if not IsPointer(Input) then return end
-		Drag.Active, Drag.Start, Drag.Pos = true, Input.Position, Frame.Position
-		Creator.AddSignal(Input.Changed, function()
-			if Input.UserInputState == Enum.UserInputState.End then Drag.Active = false end
+		if Drag.Active then return end -- đang kéo bằng ngón khác -> bỏ qua ngón mới
+		Drag.Active, Drag.Input = true, Input
+		Drag.Start, Drag.Pos = Input.Position, Frame.Position
+		local Conn
+		Conn = Input.Changed:Connect(function()
+			if Input.UserInputState == Enum.UserInputState.End or Input.UserInputState == Enum.UserInputState.Cancel then
+				StopDrag(Input)
+				Conn:Disconnect()
+			end
 		end)
+	end)
+	Creator.AddSignal(UserInputService.InputEnded, function(Input)
+		StopDrag(Input)
 	end)
 	Creator.AddSignal(UserInputService.InputChanged, function(Input)
 		if not Drag.Active then return end
-		if Input.UserInputType ~= Enum.UserInputType.MouseMovement and Input.UserInputType ~= Enum.UserInputType.Touch then return end
+		local Tracked = Drag.Input
+		if Tracked.UserInputType == Enum.UserInputType.Touch then
+			if Input ~= Tracked then return end -- chỉ nhận đúng ngón đang kéo
+		elseif Input.UserInputType ~= Enum.UserInputType.MouseMovement then
+			return
+		end
 		local Delta = Input.Position - Drag.Start
 		Frame.Position = UDim2.new(Drag.Pos.X.Scale, Drag.Pos.X.Offset + Delta.X, Drag.Pos.Y.Scale, Drag.Pos.Y.Offset + Delta.Y)
 	end)

@@ -2787,7 +2787,7 @@ Components.Tab = (function()
 		local CompactTab = Window.Compact and Icon ~= nil and Icon ~= ""
 
 		Tab.Frame = New("TextButton", {
-			Size = UDim2.new(1, 0, 0, 34),
+			Size = UDim2.new(1, 0, 0, CompactTab and 40 or 34),
 			BackgroundTransparency = 0.92,
 			Parent = Parent,
 			ZIndex = 10,
@@ -2796,7 +2796,7 @@ Components.Tab = (function()
 			},
 		}, {
 			New("UICorner", {
-				CornerRadius = UDim.new(0, 6),
+				CornerRadius = UDim.new(0, CompactTab and 8 or 6),
 			}),
 			New("TextLabel", {
 				AnchorPoint = Vector2.new(0, 0.5),
@@ -2823,7 +2823,7 @@ Components.Tab = (function()
 			}),
 			Library:IconLabel(Icon, {
 				AnchorPoint = CompactTab and Vector2.new(0.5, 0.5) or Vector2.new(0, 0.5),
-				Size = UDim2.fromOffset(CompactTab and 18 or 16, CompactTab and 18 or 16),
+				Size = UDim2.fromOffset(CompactTab and 20 or 16, CompactTab and 20 or 16),
 				Position = CompactTab and UDim2.new(0.5, 0, 0.5, 0) or UDim2.new(0, 8, 0.5, 0),
 				BackgroundTransparency = 1,
 				ZIndex = 11,
@@ -4312,7 +4312,7 @@ Components.Window = (function()
 			end
 		end
 		Window.Compact = Config.CompactTabs == true
-		Window.TabWidth = Window.Compact and (Config.CompactTabWidth or 44) or Config.TabWidth
+		Window.TabWidth = Window.Compact and (Config.CompactTabWidth or 40) or Config.TabWidth
 
 		local Selector = New("Frame", {
 			Size = UDim2.fromOffset(4, 0),
@@ -4584,7 +4584,7 @@ Components.Window = (function()
 		Window.TopOffset = topOffset
 
 		local searchOffset = hasImage and (imageSize + 10 + topOffset) or topOffset
-		local searchHeight = 28
+		local searchHeight = Window.Compact and 40 or 28
 
 		local tabHolderTop
 		if hasImage then
@@ -4613,12 +4613,11 @@ Components.Window = (function()
 			ScrollingDirection = Enum.ScrollingDirection.Y,
 		}, {
 			New("UIListLayout", {
-				Padding = UDim.new(0, 4),
+				Padding = UDim.new(0, Window.Compact and 6 or 4),
 			}),
 		})
-
 		local SearchFrame = New("Frame", {
-			Size = UDim2.new(1, 0, 0, 28),
+			Size = UDim2.new(1, 0, 0, searchHeight),
 			Position = UDim2.new(0, 0, 0, searchOffset),
 			BackgroundTransparency = 0.7,
 			ZIndex = 10,
@@ -4629,10 +4628,9 @@ Components.Window = (function()
 			},
 		}, {
 			New("UICorner", {
-				CornerRadius = UDim.new(0, 4),
+				CornerRadius = UDim.new(0, Window.Compact and 8 or 4),
 			}),
 		})
-
 		local SearchInput = New("TextBox", {
 			FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
 			TextColor3 = Color3.fromRGB(200, 200, 200),
@@ -4672,13 +4670,14 @@ Components.Window = (function()
 
 		if Window.Compact then
 			local SEARCH_W = 170
-			local BAR_H = 34
+			local BAR_H = 40
 			local GAP = 6
 			local PAD = 3
 			local SearchOpen = false
 			local LastClosed = 0
 			local SlideInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 			SearchIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+			SearchIcon.Size = UDim2.fromOffset(20, 20)
 
 			local SearchClip = New("Frame", {
 				BackgroundTransparency = 1,
@@ -4843,7 +4842,7 @@ Components.Window = (function()
 		local imageSize = Window.TabWidth - 24
 		local topOffset = Window.TopOffset or 25
 		local imageOffset = hasImage and (imageSize + 10 + topOffset) or topOffset
-		local searchHeight = 28
+		local searchHeight = Window.Compact and 40 or 28
 		local totalOffset = (Window.ShowSearch and searchHeight or 0) + imageOffset
 
 		local TabFrame = New("Frame", {
@@ -5144,12 +5143,12 @@ Components.Window = (function()
 		local LastTime = 0
 		Window.SelectorPosMotor:onStep(function(Value)
 			local base = Window.TabHolderTop or 45
-			local verticalInset = 16
+			local verticalInset = Window.Compact and 19 or 16
 			local selectorY = base + Value + verticalInset
 
 			local searchOffset = Window.HasImage and (Window.ImageSize + Window.TopOffset + 10) or Window.TopOffset
 			local searchTop = searchOffset
-			local searchBottom = searchTop + 28
+			local searchBottom = searchTop + (Window.Compact and 40 or 28)
 
 			if Window.HasImage and Window.ImageSize then
 				local imageBottom = Window.ImageSize + Window.TopOffset + 10
@@ -5358,7 +5357,7 @@ Components.Window = (function()
 			local searchOffset = Window.HasImage and (Window.ImageSize + 10 + topOffset) or topOffset
 			SearchFrame.Position = UDim2.new(0, 0, 0, searchOffset)
 			local imageOffset = Window.HasImage and (Window.ImageSize + 10 + topOffset) or topOffset
-			local searchHeight = 28
+			local searchHeight = Window.Compact and 40 or 28
 			local totalOffset = (Window.ShowSearch and searchHeight or 0) + imageOffset
 			TabFrame.Size = UDim2.new(0, Window.TabWidth, 1, -(totalOffset + 31))
 

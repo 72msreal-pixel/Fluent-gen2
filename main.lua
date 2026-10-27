@@ -1908,8 +1908,17 @@ do
         if type(self.Config.Request) == "function" then
             return self.Config.Request({Url = url, Method = "GET", Timeout = 15})
         end
+        -- Uu tien game:HttpGet (on dinh, it bi Google 429 hon request() tren Delta/mobile).
+        -- Tra ve string body; LM:Send se Decode truc tiep.
+        local okGet, body = pcall(function() return game:HttpGet(url) end)
+        if okGet and type(body) == "string" and body ~= "" then return body end
         local sender = request or http_request or (syn and syn.request) or (http and http.request)
         if type(sender) == "function" then return sender({Url = url, Method = "GET", Timeout = 15}) end
+        if not okGet and not RunService:IsClient() then
+            -- server: roi xuong HttpService ben duoi
+        elseif not okGet then
+            error("HttpGet failed: " .. tostring(body))
+        end
         if RunService:IsClient() then
             error("Auto translation needs Request = function(options) ... end (server proxy), or a supported HTTP request function. HttpService cannot send HTTP from a normal LocalScript.")
         end

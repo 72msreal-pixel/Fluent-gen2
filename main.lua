@@ -2220,9 +2220,9 @@ Components.Element = (function()
 			FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Medium, Enum.FontStyle.Normal),
 			Text = Title,
 			TextColor3 = Color3.fromRGB(240, 240, 240),
-			TextSize = 13,
+			TextSize = 15,
 			TextXAlignment = Enum.TextXAlignment.Left,
-			Size = UDim2.new(1, 0, 0, 14),
+			Size = UDim2.new(1, 0, 0, 17),
 			BackgroundColor3 = Color3.fromRGB(255, 255, 255),
 			BackgroundTransparency = 1,
 			LayoutOrder = 2,
@@ -2263,7 +2263,7 @@ Components.Element = (function()
 			FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
 			Text = Desc,
 			TextColor3 = Color3.fromRGB(200, 200, 200),
-			TextSize = 12,
+			TextSize = 13,
 			TextWrapped = true,
 			TextXAlignment = Enum.TextXAlignment.Left,
 			BackgroundColor3 = Color3.fromRGB(255, 255, 255),
@@ -2279,16 +2279,16 @@ Components.Element = (function()
 			AutomaticSize = Enum.AutomaticSize.Y,
 			BackgroundColor3 = Color3.fromRGB(255, 255, 255),
 			BackgroundTransparency = 1,
-			Position = UDim2.fromOffset(10, 0),
-			Size = UDim2.new(1, -28, 0, 0),
+			Position = UDim2.fromOffset(12, 0),
+			Size = UDim2.new(1, -32, 0, 0),
 		}, {
 			New("UIListLayout", {
 				SortOrder = Enum.SortOrder.LayoutOrder,
 				VerticalAlignment = Enum.VerticalAlignment.Center,
 			}),
 			New("UIPadding", {
-				PaddingBottom = UDim.new(0, 13),
-				PaddingTop = UDim.new(0, 13),
+				PaddingBottom = UDim.new(0, 16),
+				PaddingTop = UDim.new(0, 16),
 			}),
 			Element.Header,
 			Element.DescLabel,
@@ -2513,7 +2513,7 @@ Components.Section = (function()
 
 		local HEADER_H = (Box and 32 or 25) + DESC_H
 		local BOTTOM_PAD = Box and 8 or 0
-		local SIDE_PAD = Box and 8 or 0
+		local SIDE_PAD = Box and 4 or 0
 		local TextSize = Config.TextSize or 17
 
 		Section.Layout = New("UIListLayout", {
@@ -2569,9 +2569,9 @@ Components.Section = (function()
 
 		-- Mũi tên: chevron-down = mở, xoay -90 = đóng
 		local Chevron = Library:IconLabel("chevron-down", {
-			Size = UDim2.fromOffset(16, 16),
+			Size = UDim2.fromOffset(18, 18),
 			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, -20 - SIDE_PAD, 0, Box and 16 or 11),
+			Position = UDim2.new(1, -(SIDE_PAD + 10), 0, (Box and 16 or 11) + DESC_H / 2),
 			BackgroundTransparency = 1,
 			Rotation = Collapsed and -90 or 0,
 			ThemeTag = {
@@ -2589,8 +2589,8 @@ Components.Section = (function()
 			TextYAlignment = Enum.TextYAlignment.Center,
 			TextTruncate = Enum.TextTruncate.AtEnd,
 			FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
-			Size = UDim2.new(1, -16 - SIDE_PAD * 2, 0, 14),
-			Position = UDim2.fromOffset(SIDE_PAD, (Box and 7 or 2) + 20),
+			Size = UDim2.new(1, -16 - SIDE_PAD * 2 - (Icon and 21 or 0), 0, 14),
+			Position = UDim2.fromOffset(SIDE_PAD + (Icon and 21 or 0), (Box and 7 or 2) + 20),
 			BackgroundTransparency = 1,
 			ThemeTag = {
 				TextColor3 = "SubText",
@@ -2598,7 +2598,7 @@ Components.Section = (function()
 		}) or nil
 
 		local HeaderButton = New("TextButton", {
-			Size = UDim2.new(1, -16, 0, (Box and 30 or 22) + DESC_H),
+			Size = UDim2.new(1, 0, 0, (Box and 30 or 22) + DESC_H),
 			Position = UDim2.fromOffset(0, 0),
 			BackgroundTransparency = 1,
 			Text = "",
@@ -2846,7 +2846,7 @@ Components.Tab = (function()
 		}, {
 			ContainerLayout,
 			New("UIPadding", {
-				PaddingRight = UDim.new(0, 10),
+				PaddingRight = UDim.new(0, 3),
 				PaddingLeft = UDim.new(0, 1),
 				PaddingTop = UDim.new(0, 1),
 				PaddingBottom = UDim.new(0, 1),
@@ -2916,7 +2916,7 @@ Components.Tab = (function()
 
 				self.SubTabHolder = New("ScrollingFrame", {
 					Name = "SubTabHolder",
-					Size = UDim2.new(1, -20, 0, 40),
+					Size = UDim2.new(1, -5, 0, 40),
 					Position = UDim2.fromOffset(1, 8),
 					BackgroundTransparency = 1,
 					Parent = self.ContainerFrame,
@@ -2943,7 +2943,7 @@ Components.Tab = (function()
 				-- Đường kẻ phân cách dưới hàng tab con
 				New("Frame", {
 					Name = "SubTabDivider",
-					Size = UDim2.new(1, -11, 0, 1),
+					Size = UDim2.new(1, -5, 0, 1),
 					Position = UDim2.fromOffset(1, 48),
 					BackgroundTransparency = 0.88,
 					BorderSizePixel = 0,
@@ -2954,7 +2954,7 @@ Components.Tab = (function()
 				})
 
 				local SubTabContainerHolder = New("Frame", {
-					Size = UDim2.new(1, -11, 1, -60),
+					Size = UDim2.new(1, -5, 1, -60),
 					Position = UDim2.fromOffset(1, 52),
 					BackgroundTransparency = 1,
 					ClipsDescendants = true,
@@ -3065,7 +3065,7 @@ Components.Tab = (function()
 					SortOrder = Enum.SortOrder.LayoutOrder,
 				}),
 				New("UIPadding", {
-					PaddingRight = UDim.new(0, 10),
+					PaddingRight = UDim.new(0, 3),
 					PaddingLeft = UDim.new(0, 1),
 					PaddingTop = UDim.new(0, 1),
 					PaddingBottom = UDim.new(0, 1),
@@ -5446,7 +5446,7 @@ ElementsTable.Button = (function()
 		local ButtonFrame = Components.Element(Config.Title, Config.Description, self.Container, true, Config)
 
 		local ButtonIco = Library:IconLabel("chevron-right", {
-			Size = UDim2.fromOffset(16, 16),
+			Size = UDim2.fromOffset(18, 18),
 			AnchorPoint = Vector2.new(1, 0.5),
 			Position = UDim2.new(1, -10, 0.5, 0),
 			BackgroundTransparency = 1,

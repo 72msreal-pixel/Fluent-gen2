@@ -4308,7 +4308,7 @@ Components.Window = (function()
 			end
 		end
 		Window.Compact = Config.CompactTabs == true
-		Window.TabWidth = Window.Compact and (Config.CompactTabWidth or 41) or Config.TabWidth
+		Window.TabWidth = Window.Compact and (Config.CompactTabWidth or 43) or Config.TabWidth
 
 		local Selector = New("Frame", {
 			Size = UDim2.fromOffset(4, 0),

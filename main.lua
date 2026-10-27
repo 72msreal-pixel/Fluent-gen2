@@ -2485,19 +2485,48 @@ end)()
 Components.Section = (function()
 	local New = Creator.New
 
-	return function(Title, Parent, Icon, StartCollapsed)
+	local function ResolveWeight(W)
+		if typeof(W) == "EnumItem" then
+			return W
+		end
+		if type(W) == "string" and Enum.FontWeight[W] then
+			return Enum.FontWeight[W]
+		end
+		return Enum.FontWeight.SemiBold
+	end
+
+	local function ResolveHAlign(A)
+		local Name = typeof(A) == "EnumItem" and A.Name or A
+		if Name == "Center" then
+			return Enum.HorizontalAlignment.Center
+		elseif Name == "Right" then
+			return Enum.HorizontalAlignment.Right
+		end
+		return Enum.HorizontalAlignment.Left
+	end
+
+	-- Config: Title, Icon (đã resolve), Box, FontWeight, TextTransparency,
+	--         TextXAlignment, TextSize, Opened
+	return function(Config, Parent)
 		local Section = {}
-		local Collapsed = StartCollapsed == true
+		local Title = Config.Title or "Section"
+		local Icon = Config.Icon
+		local Box = Config.Box == true
+		local Collapsed = Config.Opened == false
 		local CurrentTween = nil
-		local HEADER_H = 25
+
+		local HEADER_H = Box and 32 or 25
+		local BOTTOM_PAD = Box and 8 or 0
+		local SIDE_PAD = Box and 8 or 0
+		local TextSize = Config.TextSize or 17
 
 		Section.Layout = New("UIListLayout", {
 			Padding = UDim.new(0, 5),
 		})
 
 		Section.Container = New("Frame", {
-			Size = UDim2.new(1, 0, 0, 26),
-			Position = UDim2.fromOffset(0, 24),
+			Size = UDim2.new(1, -SIDE_PAD * 2, 0, 26),
+			Position = UDim2.fromOffset(SIDE_PAD, HEADER_H - 1),
 			BackgroundTransparency = 1,
 			Visible = not Collapsed,
 		}, {
@@ -2505,8 +2534,8 @@ Components.Section = (function()
 		})
 
 		local SectionHeader = New("Frame", {
-			Size = UDim2.new(1, -16, 0, 18),
-			Position = UDim2.fromOffset(0, 2),
+			Size = UDim2.new(1, -16 - SIDE_PAD * 2, 0, 18),
+			Position = UDim2.fromOffset(SIDE_PAD, Box and 7 or 2),
 			BackgroundTransparency = 1,
 		}, {
 			New("UIListLayout", {
@@ -2514,6 +2543,7 @@ Components.Section = (function()
 				FillDirection = Enum.FillDirection.Horizontal,
 				SortOrder = Enum.SortOrder.LayoutOrder,
 				VerticalAlignment = Enum.VerticalAlignment.Center,
+				HorizontalAlignment = ResolveHAlign(Config.TextXAlignment),
 			}),
 			Icon and New("ImageLabel", {
 				Image = Icon,
@@ -2527,9 +2557,9 @@ Components.Section = (function()
 			New("TextLabel", {
 				RichText = true,
 				Text = Title,
-				TextTransparency = 0,
-				FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal),
-				TextSize = 18,
+				TextTransparency = Config.TextTransparency or 0,
+				FontFace = Font.new("rbxassetid://12187365364", ResolveWeight(Config.FontWeight), Enum.FontStyle.Normal),
+				TextSize = TextSize,
 				TextXAlignment = "Left",
 				TextYAlignment = "Center",
 				Size = UDim2.fromScale(0, 1),
@@ -2542,12 +2572,12 @@ Components.Section = (function()
 			}),
 		})
 
-		-- Mũi tên đóng/mở (chevron-down = đang mở, xoay -90 = đang đóng)
+		-- Mũi tên: chevron-down = mở, xoay -90 = đóng
 		local Chevron = New("ImageLabel", {
 			Image = "rbxassetid://10709790948",
 			Size = UDim2.fromOffset(16, 16),
 			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, -20, 0, 11),
+			Position = UDim2.new(1, -20 - SIDE_PAD, 0, Box and 16 or 11),
 			BackgroundTransparency = 1,
 			Rotation = Collapsed and -90 or 0,
 			ThemeTag = {
@@ -2555,34 +2585,50 @@ Components.Section = (function()
 			},
 		})
 
-		-- Nút bấm phủ lên header
 		local HeaderButton = New("TextButton", {
-			Size = UDim2.new(1, -16, 0, 22),
+			Size = UDim2.new(1, -16, 0, Box and 30 or 22),
 			Position = UDim2.fromOffset(0, 0),
 			BackgroundTransparency = 1,
 			Text = "",
 			ZIndex = 5,
 		})
 
-		Section.Root = New("Frame", {
-			BackgroundTransparency = 1,
-			Size = UDim2.new(1, 0, 0, Collapsed and HEADER_H or 26),
-			LayoutOrder = 7,
-			Parent = Parent,
-		}, {
+		local RootChildren = {
 			SectionHeader,
 			Chevron,
 			HeaderButton,
 			Section.Container,
-		})
+		}
+
+		-- Box: nền + viền bo góc như WindUI
+		if Box then
+			table.insert(RootChildren, New("UICorner", { CornerRadius = UDim.new(0, 6) }))
+			table.insert(RootChildren, New("UIStroke", {
+				Thickness = 1,
+				Transparency = 0.5,
+				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+				ThemeTag = {
+					Color = "ElementBorder",
+				},
+			}))
+		end
+
+		Section.Root = New("Frame", {
+			BackgroundTransparency = Box and 0.92 or 1,
+			Size = UDim2.new(1, 0, 0, Collapsed and HEADER_H or (HEADER_H + 1)),
+			LayoutOrder = 7,
+			Parent = Parent,
+			ThemeTag = Box and {
+				BackgroundColor3 = "Element",
+			} or nil,
+		}, RootChildren)
 
 		local function FullHeight()
-			return Section.Layout.AbsoluteContentSize.Y + HEADER_H
+			return Section.Layout.AbsoluteContentSize.Y + HEADER_H + BOTTOM_PAD
 		end
 
 		Creator.AddSignal(Section.Layout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
-			Section.Container.Size = UDim2.new(1, 0, 0, Section.Layout.AbsoluteContentSize.Y)
-			-- Đang đóng hoặc đang chạy animation thì không ép size
+			Section.Container.Size = UDim2.new(1, -SIDE_PAD * 2, 0, Section.Layout.AbsoluteContentSize.Y)
 			if not Collapsed and not CurrentTween then
 				Section.Root.Size = UDim2.new(1, 0, 0, FullHeight())
 			end
@@ -2857,6 +2903,7 @@ Components.Tab = (function()
 				})
 
 				self.SubTabHolder = New("ScrollingFrame", {
+					Name = "SubTabHolder",
 					Size = UDim2.new(1, -20, 0, 40),
 					Position = UDim2.fromOffset(1, 8),
 					BackgroundTransparency = 1,
@@ -2881,9 +2928,22 @@ Components.Tab = (function()
 					self.SubTabHolder.CanvasSize = UDim2.new(0, SubTabListLayout.AbsoluteContentSize.X, 0, 40)
 				end)
 
-				local SubTabContainerHolder = New("Frame", {
-					Size = UDim2.new(1, -11, 1, -56),
+				-- Đường kẻ phân cách dưới hàng tab con
+				New("Frame", {
+					Name = "SubTabDivider",
+					Size = UDim2.new(1, -11, 0, 1),
 					Position = UDim2.fromOffset(1, 48),
+					BackgroundTransparency = 0.88,
+					BorderSizePixel = 0,
+					Parent = self.ContainerFrame,
+					ThemeTag = {
+						BackgroundColor3 = "Text",
+					},
+				})
+
+				local SubTabContainerHolder = New("Frame", {
+					Size = UDim2.new(1, -11, 1, -60),
+					Position = UDim2.fromOffset(1, 52),
 					BackgroundTransparency = 1,
 					ClipsDescendants = true,
 					Parent = self.ContainerFrame,
@@ -3081,29 +3141,50 @@ Components.Tab = (function()
 				self:SelectSubTab(SubTabIndex)
 			end
 
-			function SubTab:AddSection(SectionTitle, SectionIcon, StartCollapsed)
+			function SubTab:Section(Config)
+				if type(Config) ~= "table" then
+					Config = { Title = tostring(Config) }
+				end
 				local Section = { Type = "Section" }
 
-				local Icon = SectionIcon
-				if not fischbypass then 
+				local Icon = Config.Icon
+				if Icon and not fischbypass then
 					if Library:GetIcon(Icon) then
 						Icon = Library:GetIcon(Icon)
 					end
-
-					if Icon == "" or nil then
+					if Icon == "" then
 						Icon = nil
 					end
 				end
 
-				local SectionFrame = Components.Section(SectionTitle, SubTab.Container, Icon, StartCollapsed)
+				local SectionFrame = Components.Section({
+					Title = Config.Title,
+					Icon = Icon,
+					Box = Config.Box,
+					FontWeight = Config.FontWeight,
+					TextTransparency = Config.TextTransparency,
+					TextXAlignment = Config.TextXAlignment,
+					TextSize = Config.TextSize,
+					Opened = Config.Opened,
+				}, SubTab.Container)
 				Section.Container = SectionFrame.Container
 				Section.Toggle = function() SectionFrame.Toggle() end
 				Section.SetCollapsed = function(_, State, Instant) SectionFrame.SetCollapsed(State, Instant) end
 				Section.IsCollapsed = function() return SectionFrame.IsCollapsed() end
+				Section.Open = function() SectionFrame.SetCollapsed(false) end
+				Section.Close = function() SectionFrame.SetCollapsed(true) end
 				Section.ScrollFrame = SubTab.Container
 
 				setmetatable(Section, Elements)
 				return Section
+			end
+
+			function SubTab:AddSection(SectionTitle, SectionIcon, StartCollapsed)
+				return SubTab:Section({
+					Title = SectionTitle,
+					Icon = SectionIcon,
+					Opened = not StartCollapsed,
+				})
 			end
 
 			setmetatable(SubTab, Elements)
@@ -3225,33 +3306,55 @@ Components.Tab = (function()
 			end
 		end
 
-		function Tab:AddSection(SectionTitle, SectionIcon, StartCollapsed)
+		function Tab:Section(Config)
+			if type(Config) ~= "table" then
+				Config = { Title = tostring(Config) }
+			end
+
 			if self.SelectedSubTab > 0 and self.SubTabs[self.SelectedSubTab] then
-				return self.SubTabs[self.SelectedSubTab]:AddSection(SectionTitle, SectionIcon, StartCollapsed)
+				return self.SubTabs[self.SelectedSubTab]:Section(Config)
 			end
 
 			local Section = { Type = "Section" }
 
-			local Icon = SectionIcon
-			if not fischbypass then 
+			local Icon = Config.Icon
+			if Icon and not fischbypass then
 				if Library:GetIcon(Icon) then
 					Icon = Library:GetIcon(Icon)
 				end
-
-				if Icon == "" or nil then
+				if Icon == "" then
 					Icon = nil
 				end
 			end
 
-			local SectionFrame = Components.Section(SectionTitle, Tab.Container, Icon, StartCollapsed)
+			local SectionFrame = Components.Section({
+				Title = Config.Title,
+				Icon = Icon,
+				Box = Config.Box,
+				FontWeight = Config.FontWeight,
+				TextTransparency = Config.TextTransparency,
+				TextXAlignment = Config.TextXAlignment,
+				TextSize = Config.TextSize,
+				Opened = Config.Opened,
+			}, Tab.Container)
 			Section.Container = SectionFrame.Container
 			Section.Toggle = function() SectionFrame.Toggle() end
 			Section.SetCollapsed = function(_, State, Instant) SectionFrame.SetCollapsed(State, Instant) end
 			Section.IsCollapsed = function() return SectionFrame.IsCollapsed() end
+			Section.Open = function() SectionFrame.SetCollapsed(false) end
+			Section.Close = function() SectionFrame.SetCollapsed(true) end
 			Section.ScrollFrame = Tab.Container
 
 			setmetatable(Section, Elements)
 			return Section
+		end
+
+		function Tab:AddSection(SectionTitle, SectionIcon, StartCollapsed)
+			return Tab:Section({
+				Title = SectionTitle,
+				Icon = SectionIcon,
+				Opened = not StartCollapsed,
+			})
 		end
 
 		setmetatable(Tab, Elements)
@@ -5808,6 +5911,22 @@ ElementsTable.Dropdown = (function()
 				local windowHeight = windowRoot.AbsoluteSize.Y
 				local windowCenterY = windowY + windowHeight / 2
 				targetY = windowCenterY - canvasHeight / 2
+
+				-- Nếu dropdown nằm trong tab có tab con: popup mọc lên ngang hàng tab con
+				do
+					local anc = container
+					local holder = nil
+					while anc and anc ~= windowRoot do
+						holder = anc:FindFirstChild("SubTabHolder")
+						if holder then
+							break
+						end
+						anc = anc.Parent
+					end
+					if holder and holder:IsA("GuiObject") then
+						targetY = holder.AbsolutePosition.Y
+					end
+				end
 				
 				local windowTop = windowY
 				local windowBottom = windowY + windowHeight

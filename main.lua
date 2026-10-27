@@ -4580,7 +4580,7 @@ Components.Window = (function()
 		Window.TopOffset = topOffset
 
 		local searchOffset = hasImage and (imageSize + 10 + topOffset) or topOffset
-		local searchHeight = Window.Compact and 32 or 28
+		local searchHeight = Window.Compact and 38 or 28
 
 		local tabHolderTop
 		if hasImage then
@@ -4838,7 +4838,7 @@ Components.Window = (function()
 		local imageSize = Window.TabWidth - 24
 		local topOffset = Window.TopOffset or 25
 		local imageOffset = hasImage and (imageSize + 10 + topOffset) or topOffset
-		local searchHeight = Window.Compact and 32 or 28
+		local searchHeight = Window.Compact and 38 or 28
 		local totalOffset = (Window.ShowSearch and searchHeight or 0) + imageOffset
 
 		local TabFrame = New("Frame", {
@@ -5144,7 +5144,7 @@ Components.Window = (function()
 
 			local searchOffset = Window.HasImage and (Window.ImageSize + Window.TopOffset + 10) or Window.TopOffset
 			local searchTop = searchOffset
-			local searchBottom = searchTop + (Window.Compact and 32 or 28)
+			local searchBottom = searchTop + (Window.Compact and 38 or 28)
 
 			if Window.HasImage and Window.ImageSize then
 				local imageBottom = Window.ImageSize + Window.TopOffset + 10
@@ -5353,7 +5353,7 @@ Components.Window = (function()
 			local searchOffset = Window.HasImage and (Window.ImageSize + 10 + topOffset) or topOffset
 			SearchFrame.Position = UDim2.new(0, 0, 0, searchOffset)
 			local imageOffset = Window.HasImage and (Window.ImageSize + 10 + topOffset) or topOffset
-			local searchHeight = Window.Compact and 32 or 28
+			local searchHeight = Window.Compact and 38 or 28
 			local totalOffset = (Window.ShowSearch and searchHeight or 0) + imageOffset
 			TabFrame.Size = UDim2.new(0, Window.TabWidth, 1, -(totalOffset + 31))
 

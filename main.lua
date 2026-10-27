@@ -2220,9 +2220,9 @@ Components.Element = (function()
 			FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Medium, Enum.FontStyle.Normal),
 			Text = Title,
 			TextColor3 = Color3.fromRGB(240, 240, 240),
-			TextSize = 15,
+			TextSize = 13,
 			TextXAlignment = Enum.TextXAlignment.Left,
-			Size = UDim2.new(1, 0, 0, 17),
+			Size = UDim2.new(1, 0, 0, 14),
 			BackgroundColor3 = Color3.fromRGB(255, 255, 255),
 			BackgroundTransparency = 1,
 			LayoutOrder = 2,
@@ -2263,7 +2263,7 @@ Components.Element = (function()
 			FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
 			Text = Desc,
 			TextColor3 = Color3.fromRGB(200, 200, 200),
-			TextSize = 13,
+			TextSize = 12,
 			TextWrapped = true,
 			TextXAlignment = Enum.TextXAlignment.Left,
 			BackgroundColor3 = Color3.fromRGB(255, 255, 255),
@@ -2279,16 +2279,16 @@ Components.Element = (function()
 			AutomaticSize = Enum.AutomaticSize.Y,
 			BackgroundColor3 = Color3.fromRGB(255, 255, 255),
 			BackgroundTransparency = 1,
-			Position = UDim2.fromOffset(12, 0),
-			Size = UDim2.new(1, -32, 0, 0),
+			Position = UDim2.fromOffset(10, 0),
+			Size = UDim2.new(1, -28, 0, 0),
 		}, {
 			New("UIListLayout", {
 				SortOrder = Enum.SortOrder.LayoutOrder,
 				VerticalAlignment = Enum.VerticalAlignment.Center,
 			}),
 			New("UIPadding", {
-				PaddingBottom = UDim.new(0, 16),
-				PaddingTop = UDim.new(0, 16),
+				PaddingBottom = UDim.new(0, 13),
+				PaddingTop = UDim.new(0, 13),
 			}),
 			Element.Header,
 			Element.DescLabel,
@@ -2512,8 +2512,9 @@ Components.Section = (function()
 		local DESC_H = HasDesc and 16 or 0
 
 		local HEADER_H = (Box and 32 or 25) + DESC_H
+		local EXTRA_W = 6 -- kéo section (và các nút bên trong) dài qua phải thêm một chút
 		local BOTTOM_PAD = Box and 8 or 0
-		local SIDE_PAD = Box and 4 or 0
+		local SIDE_PAD = Box and 8 or 0
 		local TextSize = Config.TextSize or 17
 
 		Section.Layout = New("UIListLayout", {
@@ -2530,7 +2531,7 @@ Components.Section = (function()
 		})
 
 		local SectionHeader = New("Frame", {
-			Size = UDim2.new(1, -16 - SIDE_PAD * 2, 0, 18),
+			Size = UDim2.new(1, -32 - SIDE_PAD * 2, 0, 18),
 			Position = UDim2.fromOffset(SIDE_PAD, Box and 7 or 2),
 			BackgroundTransparency = 1,
 		}, {
@@ -2569,9 +2570,10 @@ Components.Section = (function()
 
 		-- Mũi tên: chevron-down = mở, xoay -90 = đóng
 		local Chevron = Library:IconLabel("chevron-down", {
-			Size = UDim2.fromOffset(18, 18),
+			Size = UDim2.fromOffset(16, 16),
 			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, -(SIDE_PAD + 10), 0, (Box and 16 or 11) + DESC_H / 2),
+			-- căn giữa theo chiều dọc của cả header (kể cả khi có desc), sát phải ngang icon của nút
+			Position = UDim2.new(1, -10 - SIDE_PAD, 0, (Box and 16 or 11) + DESC_H / 2),
 			BackgroundTransparency = 1,
 			Rotation = Collapsed and -90 or 0,
 			ThemeTag = {
@@ -2589,8 +2591,8 @@ Components.Section = (function()
 			TextYAlignment = Enum.TextYAlignment.Center,
 			TextTruncate = Enum.TextTruncate.AtEnd,
 			FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
-			Size = UDim2.new(1, -16 - SIDE_PAD * 2 - (Icon and 21 or 0), 0, 14),
-			Position = UDim2.fromOffset(SIDE_PAD + (Icon and 21 or 0), (Box and 7 or 2) + 20),
+			Size = UDim2.new(1, -32 - SIDE_PAD * 2, 0, 14),
+			Position = UDim2.fromOffset(SIDE_PAD, (Box and 7 or 2) + 20),
 			BackgroundTransparency = 1,
 			ThemeTag = {
 				TextColor3 = "SubText",
@@ -2628,7 +2630,7 @@ Components.Section = (function()
 
 		Section.Root = New("Frame", {
 			BackgroundTransparency = Box and 0.92 or 1,
-			Size = UDim2.new(1, 0, 0, Collapsed and HEADER_H or (HEADER_H + 1)),
+			Size = UDim2.new(1, EXTRA_W, 0, Collapsed and HEADER_H or (HEADER_H + 1)),
 			LayoutOrder = 7,
 			Parent = Parent,
 			ThemeTag = Box and {
@@ -2643,7 +2645,7 @@ Components.Section = (function()
 		Creator.AddSignal(Section.Layout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
 			Section.Container.Size = UDim2.new(1, -SIDE_PAD * 2, 0, Section.Layout.AbsoluteContentSize.Y)
 			if not Collapsed and not CurrentTween then
-				Section.Root.Size = UDim2.new(1, 0, 0, FullHeight())
+				Section.Root.Size = UDim2.new(1, EXTRA_W, 0, FullHeight())
 			end
 		end)
 
@@ -2664,7 +2666,7 @@ Components.Section = (function()
 
 			if Instant then
 				Section.Container.Visible = not Collapsed
-				Section.Root.Size = UDim2.new(1, 0, 0, TargetHeight)
+				Section.Root.Size = UDim2.new(1, EXTRA_W, 0, TargetHeight)
 				Chevron.Rotation = Collapsed and -90 or 0
 				return
 			end
@@ -2675,7 +2677,7 @@ Components.Section = (function()
 			TweenService:Create(Chevron, Info, { Rotation = Collapsed and -90 or 0 }):Play()
 
 			local Tween = TweenService:Create(Section.Root, Info, {
-				Size = UDim2.new(1, 0, 0, TargetHeight),
+				Size = UDim2.new(1, EXTRA_W, 0, TargetHeight),
 			})
 			CurrentTween = Tween
 			Tween.Completed:Connect(function(PlaybackState)
@@ -2687,7 +2689,7 @@ Components.Section = (function()
 				if Collapsed then
 					Section.Container.Visible = false
 				elseif PlaybackState == Enum.PlaybackState.Completed then
-					Section.Root.Size = UDim2.new(1, 0, 0, FullHeight())
+					Section.Root.Size = UDim2.new(1, EXTRA_W, 0, FullHeight())
 				end
 			end)
 			Tween:Play()
@@ -2846,7 +2848,7 @@ Components.Tab = (function()
 		}, {
 			ContainerLayout,
 			New("UIPadding", {
-				PaddingRight = UDim.new(0, 3),
+				PaddingRight = UDim.new(0, 10),
 				PaddingLeft = UDim.new(0, 1),
 				PaddingTop = UDim.new(0, 1),
 				PaddingBottom = UDim.new(0, 1),
@@ -2916,7 +2918,7 @@ Components.Tab = (function()
 
 				self.SubTabHolder = New("ScrollingFrame", {
 					Name = "SubTabHolder",
-					Size = UDim2.new(1, -5, 0, 40),
+					Size = UDim2.new(1, -20, 0, 40),
 					Position = UDim2.fromOffset(1, 8),
 					BackgroundTransparency = 1,
 					Parent = self.ContainerFrame,
@@ -2943,7 +2945,7 @@ Components.Tab = (function()
 				-- Đường kẻ phân cách dưới hàng tab con
 				New("Frame", {
 					Name = "SubTabDivider",
-					Size = UDim2.new(1, -5, 0, 1),
+					Size = UDim2.new(1, -11, 0, 1),
 					Position = UDim2.fromOffset(1, 48),
 					BackgroundTransparency = 0.88,
 					BorderSizePixel = 0,
@@ -2954,7 +2956,7 @@ Components.Tab = (function()
 				})
 
 				local SubTabContainerHolder = New("Frame", {
-					Size = UDim2.new(1, -5, 1, -60),
+					Size = UDim2.new(1, -11, 1, -60),
 					Position = UDim2.fromOffset(1, 52),
 					BackgroundTransparency = 1,
 					ClipsDescendants = true,
@@ -3065,7 +3067,7 @@ Components.Tab = (function()
 					SortOrder = Enum.SortOrder.LayoutOrder,
 				}),
 				New("UIPadding", {
-					PaddingRight = UDim.new(0, 3),
+					PaddingRight = UDim.new(0, 10),
 					PaddingLeft = UDim.new(0, 1),
 					PaddingTop = UDim.new(0, 1),
 					PaddingBottom = UDim.new(0, 1),
@@ -5446,7 +5448,7 @@ ElementsTable.Button = (function()
 		local ButtonFrame = Components.Element(Config.Title, Config.Description, self.Container, true, Config)
 
 		local ButtonIco = Library:IconLabel("chevron-right", {
-			Size = UDim2.fromOffset(18, 18),
+			Size = UDim2.fromOffset(16, 16),
 			AnchorPoint = Vector2.new(1, 0.5),
 			Position = UDim2.new(1, -10, 0.5, 0),
 			BackgroundTransparency = 1,

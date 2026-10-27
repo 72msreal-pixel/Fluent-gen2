@@ -2792,6 +2792,8 @@ Components.Tab = (function()
 			end
 		end
 
+		local CompactTab = Window.Compact and Icon ~= nil and Icon ~= ""
+
 		Tab.Frame = New("TextButton", {
 			Size = UDim2.new(1, 0, 0, 34),
 			BackgroundTransparency = 0.92,
@@ -2821,15 +2823,16 @@ Components.Tab = (function()
 				TextYAlignment = "Center",
 				Size = UDim2.new(1, -12, 1, 0),
 				BackgroundTransparency = 1,
+				Visible = not CompactTab,
 				ZIndex = 11,
 				ThemeTag = {
 					TextColor3 = "Text",
 				},
 			}),
 			Library:IconLabel(Icon, {
-				AnchorPoint = Vector2.new(0, 0.5),
-				Size = UDim2.fromOffset(16, 16),
-				Position = UDim2.new(0, 8, 0.5, 0),
+				AnchorPoint = CompactTab and Vector2.new(0.5, 0.5) or Vector2.new(0, 0.5),
+				Size = UDim2.fromOffset(CompactTab and 18 or 16, CompactTab and 18 or 16),
+				Position = CompactTab and UDim2.new(0.5, 0, 0.5, 0) or UDim2.new(0, 8, 0.5, 0),
 				BackgroundTransparency = 1,
 				ZIndex = 11,
 				ThemeTag = {
@@ -4308,7 +4311,9 @@ Components.Window = (function()
 				Window.Root.Position = Window.Position
 			end
 		end
-		Window.TabWidth = Config.TabWidth
+		-- CompactTabs = true: thanh tab thu gọn chỉ còn icon (search thành nút icon, UserInfo chỉ còn avatar)
+		Window.Compact = Config.CompactTabs == true
+		Window.TabWidth = Window.Compact and (Config.CompactTabWidth or 44) or Config.TabWidth
 
 		local Selector = New("Frame", {
 			Size = UDim2.fromOffset(4, 0),
@@ -4666,6 +4671,48 @@ Components.Window = (function()
 			Frame = SearchFrame,
 		}
 
+		if Window.Compact then
+			local SEARCH_W = 200
+			local SearchOpen = false
+			SearchInput.Visible = false
+			SearchIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+
+			local SearchButton = New("TextButton", {
+				Size = UDim2.fromScale(1, 1),
+				BackgroundTransparency = 1,
+				Text = "",
+				ZIndex = 12,
+				Parent = SearchFrame,
+			})
+
+			local function SetSearchOpen(State)
+				if State == SearchOpen then
+					return
+				end
+				SearchOpen = State
+				Window.TabFrame.ClipsDescendants = not State
+				Window.TabFrame.ZIndex = State and 30 or 1
+				SearchInput.Visible = State
+				SearchButton.Visible = not State
+				SearchIcon.Position = State and UDim2.new(1, -13, 0.5, 0) or UDim2.new(0.5, 0, 0.5, 0)
+				TweenService:Create(SearchFrame, TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+					Size = UDim2.new(0, State and SEARCH_W or Window.TabWidth, 0, 28),
+				}):Play()
+				if State then
+					SearchInput:CaptureFocus()
+				end
+			end
+
+			Creator.AddSignal(SearchButton.MouseButton1Click, function()
+				SetSearchOpen(true)
+			end)
+			Creator.AddSignal(SearchInput.FocusLost, function()
+				if SearchInput.Text == "" then
+					SetSearchOpen(false)
+				end
+			end)
+		end
+
 		Creator.AddSignal(SearchTextbox.Input:GetPropertyChangedSignal("Text"), function()
 			local searchText = SearchTextbox.Input.Text or ""
 			UpdateElementVisibility(searchText)
@@ -4875,8 +4922,8 @@ Components.Window = (function()
 				Name = "Avatar",
 				BackgroundTransparency = 1,
 				Size = UDim2.fromOffset(avatarSize, avatarSize),
-				Position = UDim2.new(0, 0, 0.5, 0),
-				AnchorPoint = Vector2.new(0, 0.5),
+				Position = Window.Compact and UDim2.new(0.5, 0, 0.5, 0) or UDim2.new(0, 0, 0.5, 0),
+				AnchorPoint = Window.Compact and Vector2.new(0.5, 0.5) or Vector2.new(0, 0.5),
 				Image = "rbxassetid://0",
 				Parent = UserInfoSection,
 			}, {
@@ -4903,6 +4950,7 @@ Components.Window = (function()
 				FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Medium, Enum.FontStyle.Normal),
 				TextSize = 13,
 				Text = titleText,
+				Visible = not Window.Compact,
 				Size = UDim2.new(1, -avatarSize - 12, 0.5, 0),
 				Position = UDim2.new(0, avatarSize + 12, 0, -2),
 				Parent = UserInfoSection,
@@ -4918,6 +4966,7 @@ Components.Window = (function()
 				TextSize = 12,
 				TextTransparency = 0.2,
 				Text = subtitleText,
+				Visible = not Window.Compact,
 				TextColor3 = parseColor(Config.UserInfoSubtitleColor),
 				Size = UDim2.new(1, -avatarSize - 12, 0.5, 0),
 				Position = UDim2.new(0, avatarSize + 12, 0.5, 2),
@@ -9408,6 +9457,8 @@ Library.CreateWindow = function(self, Config)
 
 
 		TabWidth = Config.TabWidth,
+
+		CompactTabs = Config.CompactTabs,
 
 		DropdownsOutsideWindow = Config.DropdownsOutsideWindow,
 

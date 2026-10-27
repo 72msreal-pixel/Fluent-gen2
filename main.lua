@@ -2899,19 +2899,23 @@ Components.Tab = (function()
 			Tab.ContainerFrame.CanvasSize = UDim2.new(0, 0, 0, ContainerLayout.AbsoluteContentSize.Y + 2)
 		end)
 
-		Tab.Motor, Tab.SetTransparency = Creator.SpringMotor(0.92, Tab.Frame, "BackgroundTransparency")
+		-- CompactTabs: icon không có khung nền, chỉ hiện nền khi hover / đang chọn
+		Tab.Rest = CompactTab and 1 or 0.92
+		Tab.HoverT = CompactTab and 0.93 or 0.87
+		Tab.Frame.BackgroundTransparency = Tab.Rest
+		Tab.Motor, Tab.SetTransparency = Creator.SpringMotor(Tab.Rest, Tab.Frame, "BackgroundTransparency")
 
 		Creator.AddSignal(Tab.Frame.MouseEnter, function()
-			Tab.SetTransparency(Tab.Selected and 0.85 or 0.87)
+			Tab.SetTransparency(Tab.Selected and 0.85 or Tab.HoverT)
 		end)
 		Creator.AddSignal(Tab.Frame.MouseLeave, function()
-			Tab.SetTransparency(Tab.Selected and 0.89 or 0.92)
+			Tab.SetTransparency(Tab.Selected and 0.89 or Tab.Rest)
 		end)
 		Creator.AddSignal(Tab.Frame.MouseButton1Down, function()
 			Tab.SetTransparency(0.92)
 		end)
 		Creator.AddSignal(Tab.Frame.MouseButton1Up, function()
-			Tab.SetTransparency(Tab.Selected and 0.85 or 0.89)
+			Tab.SetTransparency(Tab.Selected and 0.85 or (CompactTab and Tab.HoverT or 0.89))
 		end)
 		Creator.AddSignal(Tab.Frame.MouseButton1Click, function()
 			TabModule:SelectTab(TabIndex)
@@ -3403,7 +3407,7 @@ Components.Tab = (function()
 		TabModule.CurrentAnimationTab = Tab
 
 		for _, TabObject in next, TabModule.Tabs do
-			TabObject.SetTransparency(0.92)
+			TabObject.SetTransparency(TabObject.Rest or 0.92)
 			TabObject.Selected = false
 		end
 		TabModule.Tabs[Tab].SetTransparency(0.89)
@@ -4674,8 +4678,36 @@ Components.Window = (function()
 		if Window.Compact then
 			local SEARCH_W = 200
 			local SearchOpen = false
-			SearchInput.Visible = false
+			local LastClosed = 0
+			local SlideInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 			SearchIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+
+			-- Bố cục khi mở: [thanh nhập] | icon tìm | ui lib
+			-- Thanh nhập nằm trong khung cắt ngay bên TRÁI icon (ra ngoài mép ui), trượt từ sau icon sang trái; không đè lên ui
+			local SearchClip = New("Frame", {
+				Size = UDim2.fromOffset(0, 28),
+				BackgroundTransparency = 1,
+				ClipsDescendants = true,
+				Visible = false,
+				ZIndex = 12,
+			})
+			local SearchBar = New("Frame", {
+				Size = UDim2.new(0, SEARCH_W, 1, 0),
+				Position = UDim2.fromOffset(SEARCH_W, 0),
+				BackgroundTransparency = 0.7,
+				ZIndex = 12,
+				Parent = SearchClip,
+				ThemeTag = {
+					BackgroundColor3 = "Element",
+				},
+			}, {
+				New("UICorner", {
+					CornerRadius = UDim.new(0, 4),
+				}),
+			})
+			SearchInput.Parent = SearchBar
+			SearchInput.Size = UDim2.new(1, -16, 1, 0)
+			SearchInput.Position = UDim2.fromOffset(8, 0)
 
 			local SearchButton = New("TextButton", {
 				Size = UDim2.fromScale(1, 1),
@@ -4690,21 +4722,48 @@ Components.Window = (function()
 					return
 				end
 				SearchOpen = State
-				Window.TabFrame.ClipsDescendants = not State
-				Window.TabFrame.ZIndex = State and 30 or 1
-				SearchInput.Visible = State
-				SearchButton.Visible = not State
-				SearchIcon.Position = State and UDim2.new(1, -13, 0.5, 0) or UDim2.new(0.5, 0, 0.5, 0)
-				TweenService:Create(SearchFrame, TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-					Size = UDim2.new(0, State and SEARCH_W or Window.TabWidth, 0, 28),
-				}):Play()
+
+				if not State then
+					LastClosed = os.clock()
+				end
+
 				if State then
+					-- đặt ngay bên trái icon tìm kiếm (cạnh phải của khung cắt sát icon)
+					local Root = Window.Root
+					local Width = math.clamp(SearchFrame.AbsolutePosition.X - 6, 60, SEARCH_W) -- không tràn ra khỏi màn hình
+					SearchClip.Parent = Root
+					SearchClip.Size = UDim2.fromOffset(Width, 28)
+					SearchClip.Position = UDim2.fromOffset(
+						SearchFrame.AbsolutePosition.X - Root.AbsolutePosition.X - 6 - Width,
+						SearchFrame.AbsolutePosition.Y - Root.AbsolutePosition.Y
+					)
+					SearchBar.Size = UDim2.new(1, 0, 1, 0)
+					SearchBar.Position = UDim2.fromOffset(Width, 0)
+					SearchClip.Visible = true
+					TweenService:Create(SearchBar, SlideInfo, { Position = UDim2.fromOffset(0, 0) }):Play()
 					SearchInput:CaptureFocus()
+				else
+					SearchInput:ReleaseFocus()
+					local Tween = TweenService:Create(SearchBar, SlideInfo, { Position = UDim2.fromOffset(SearchClip.AbsoluteSize.X, 0) })
+					Tween.Completed:Connect(function()
+						if not SearchOpen then
+							SearchClip.Visible = false
+						end
+					end)
+					Tween:Play()
 				end
 			end
 
 			Creator.AddSignal(SearchButton.MouseButton1Click, function()
-				SetSearchOpen(true)
+				if os.clock() - LastClosed < 0.25 then
+					return -- vừa tự đóng do mất focus khi bấm vào icon, không mở lại ngay
+				end
+				if SearchOpen and SearchInput.Text == "" then
+					SetSearchOpen(false)
+				else
+					SetSearchOpen(true)
+					SearchInput:CaptureFocus()
+				end
 			end)
 			Creator.AddSignal(SearchInput.FocusLost, function()
 				if SearchInput.Text == "" then

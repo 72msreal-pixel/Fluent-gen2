@@ -4694,6 +4694,8 @@ Components.Window = (function()
 			local PAD = 3 -- chừa viền cho khung cắt để UIStroke không bị cắt
 			local SearchOpen = false
 			local LastClosed = 0
+			local Travel = 0
+			local FollowConn
 			local SlideInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 			SearchIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
 
@@ -4785,6 +4787,14 @@ Components.Window = (function()
 				Parent = SearchFrame,
 			})
 
+			local function PlaceSearchClip()
+				local Origin = GUI.AbsolutePosition
+				SearchClip.Position = UDim2.fromOffset(
+					Window.Root.AbsolutePosition.X - Origin.X - Travel,
+					SearchFrame.AbsolutePosition.Y - Origin.Y + SearchFrame.AbsoluteSize.Y / 2 - (BAR_H + PAD * 2) / 2
+				)
+			end
+
 			local function SetSearchOpen(State)
 				if State == SearchOpen then
 					return
@@ -4795,15 +4805,16 @@ Components.Window = (function()
 
 				if State then
 					local Root = Window.Root
-					local Width = math.clamp(Root.AbsolutePosition.X - GAP - 6, 90, SEARCH_W) -- không tràn ra khỏi màn hình
-					local Travel = Width + GAP
-					SearchClip.Parent = Root
+					local Width = math.clamp(Root.AbsolutePosition.X - GUI.AbsolutePosition.X - GAP - 6, 90, SEARCH_W) -- không tràn ra khỏi màn hình
+					Travel = Width + GAP
+					SearchClip.Parent = GUI
 					SearchClip.Size = UDim2.fromOffset(Travel, BAR_H + PAD * 2)
-					-- đặt sát mép trái ui, canh giữa theo icon tìm kiếm
-					SearchClip.Position = UDim2.fromOffset(
-						-Travel,
-						SearchFrame.AbsolutePosition.Y - Root.AbsolutePosition.Y + SearchFrame.AbsoluteSize.Y / 2 - (BAR_H + PAD * 2) / 2
-					)
+					-- đặt sát mép trái ui, canh giữa theo icon tìm kiếm (và bám theo khi kéo ui)
+					PlaceSearchClip()
+					if FollowConn then
+						FollowConn:Disconnect()
+					end
+					FollowConn = Root:GetPropertyChangedSignal("AbsolutePosition"):Connect(PlaceSearchClip)
 					SearchBar.Size = UDim2.new(0, Width, 0, BAR_H)
 					SearchBar.Position = UDim2.fromOffset(Travel, PAD) -- bắt đầu ẩn phía sau mép ui
 					SearchClip.Visible = true
@@ -4816,11 +4827,17 @@ Components.Window = (function()
 					Tween.Completed:Connect(function()
 						if not SearchOpen then
 							SearchClip.Visible = false
+							if FollowConn then
+								FollowConn:Disconnect()
+								FollowConn = nil
+							end
 						end
 					end)
 					Tween:Play()
 				end
 			end
+
+			Window.SetSearchOpen = SetSearchOpen
 
 			Creator.AddSignal(SearchButton.MouseButton1Click, function()
 				if os.clock() - LastClosed < 0.25 then
@@ -4989,12 +5006,37 @@ Components.Window = (function()
 		table.insert(rootChildren, TabFrame)
 		table.insert(rootChildren, ResizeStartFrame)
 
-		Window.Root = New("Frame", {
+		-- CanvasGroup để có thể làm mờ dần cả ui bằng GroupTransparency (ẩn/hiện mượt)
+		Window.Root = New("CanvasGroup", {
 			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			GroupTransparency = 1,
 			Size = Window.Size,
 			Position = Window.Position,
 			Parent = Config.Parent,
 		}, rootChildren)
+
+		-- Animation mờ dần khi hiện / ẩn ui
+		local FadeTween
+		local function FadeRoot(Show)
+			if FadeTween then
+				FadeTween:Cancel()
+			end
+			if Show then
+				Window.Root.Visible = true
+			end
+			local Tween = TweenService:Create(Window.Root, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				GroupTransparency = Show and 0 or 1,
+			})
+			FadeTween = Tween
+			Tween.Completed:Connect(function(State)
+				if State == Enum.PlaybackState.Completed and FadeTween == Tween and not Show then
+					Window.Root.Visible = false
+				end
+			end)
+			Tween:Play()
+		end
+		FadeRoot(true) -- mờ dần hiện ra lúc mới bật
 
 		CenterWindow()
 		Creator.AddSignal(Camera:GetPropertyChangedSignal("ViewportSize"), CenterWindow)
@@ -5395,7 +5437,10 @@ Components.Window = (function()
 
 		function Window:Minimize()
 			Window.Minimized = not Window.Minimized
-			Window.Root.Visible = not Window.Minimized
+			FadeRoot(not Window.Minimized)
+			if Window.Minimized and Window.SetSearchOpen then
+				Window.SetSearchOpen(false) -- đóng thanh tìm kiếm khi ẩn ui
+			end
 
 			for _, Option in next, Library.Options do
 				if Option and Option.Type == "Dropdown" and Option.Opened then
@@ -9954,159 +9999,92 @@ function Library:CreateMinimizer(Config)
 
 	local button = holder:FindFirstChildOfClass("TextButton")
 
-
 	if button then
-
-
-		local isDragging = false
-
-
-		local dragStart, dragOffset
-
-
-
-
-
-		if draggableWhole then
-
-
-			Creator.AddSignal(button.InputBegan, function(Input)
-
-
-				if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
-
-
-					isDragging = true
-
-
-					local pos = Input.Position
-
-
-					dragStart = Vector2.new(pos.X, pos.Y)
-
-
-					dragOffset = holder.Position
-
-
-					local conn
-
-
-					conn = Input.Changed:Connect(function()
-
-
-						if Input.UserInputState == Enum.UserInputState.End then
-
-
-							isDragging = false
-
-
-							dragStart = nil
-
-
-							dragOffset = nil
-
-
-							conn:Disconnect()
-
-
-						end
-
-
-					end)
-
-
-				end
-
-
-			end)
-
-
-
-
-
-			Creator.AddSignal(RunService.Heartbeat, function()
-
-
-				if isDragging and dragStart and dragOffset and holder and holder.Parent then
-
-
-					local mouse = LocalPlayer:GetMouse()
-
-
-					local current = Vector2.new(mouse.X, mouse.Y)
-
-
-					local delta = current - dragStart
-
-
-					local newX = dragOffset.X.Offset + delta.X
-
-
-					local newY = dragOffset.Y.Offset + delta.Y
-
-
-					local viewport = workspace.Camera.ViewportSize
-
-
-					local size = holder.AbsoluteSize
-
-
-					if newX < 0 then newX = 0 end
-
-
-					if newY < 0 then newY = 0 end
-
-
-					if newX > viewport.X - size.X then newX = viewport.X - size.X end
-
-
-					if newY > viewport.Y - size.Y then newY = viewport.Y - size.Y end
-
-
-					holder.Position = UDim2.new(0, newX, 0, newY)
-
-
-				end
-
-
-			end)
-
-
+		local ANIM_INFO = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		local DRAG_THRESHOLD = 10 -- kéo quá số pixel này mới tính là kéo (không tính là bấm)
+		local DOCK_GAP = 12
+		local AutoDock = Config.Position == nil -- không truyền Position: tự nằm bên trái ui (ngoài ui, không đè lên ui)
+		local Scale = New("UIScale", { Scale = 1, Parent = button })
+		local Hovering, Pressing, Moved = false, false, false
+		local DragInput, DragStart, StartPos
+
+		local function Animate()
+			TweenService:Create(Scale, ANIM_INFO, { Scale = Pressing and 0.88 or (Hovering and 1.1 or 1) }):Play()
+			TweenService:Create(button, ANIM_INFO, { Rotation = Pressing and 6 or 0 }):Play()
 		end
 
-
-
-
-
-		AddSignal(button.MouseButton1Click, function()
-
-
-			task.wait(0.1)
-
-
-			if not isDragging and Library.Window then
-
-
-				Library.Window:Minimize()
-
-
+		-- Nằm bên trái ui, cùng mép trên; bám theo khi ui bị kéo / căn giữa lại (dừng bám khi người dùng tự kéo nút)
+		local function DockLeft()
+			local Window = Library.Window
+			if not AutoDock or not (Window and Window.Root) then
+				return
 			end
+			local Pos = Window.Root.Position
+			holder.Position = UDim2.fromOffset(
+				math.max(8, Pos.X.Offset - holder.Size.X.Offset - DOCK_GAP),
+				math.max(8, Pos.Y.Offset)
+			)
+		end
+		if AutoDock and Library.Window and Library.Window.Root then
+			DockLeft()
+			Creator.AddSignal(Library.Window.Root:GetPropertyChangedSignal("Position"), DockLeft)
+		end
 
-
+		Creator.AddSignal(button.MouseEnter, function()
+			Hovering = true
+			Animate()
+		end)
+		Creator.AddSignal(button.MouseLeave, function()
+			Hovering = false
+			Animate()
 		end)
 
+		Creator.AddSignal(button.InputBegan, function(Input)
+			if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+				Pressing = true
+				Moved = false
+				Animate()
+				if draggableWhole then
+					DragInput = Input
+					DragStart = Vector2.new(Input.Position.X, Input.Position.Y)
+					StartPos = holder.AbsolutePosition - parentGui.AbsolutePosition
+				end
+			end
+		end)
 
+		Creator.AddSignal(UserInputService.InputChanged, function(Input)
+			if not DragInput or not (Input == DragInput or Input.UserInputType == Enum.UserInputType.MouseMovement) then
+				return
+			end
+			local Delta = Vector2.new(Input.Position.X, Input.Position.Y) - DragStart
+			if not Moved and Delta.Magnitude > DRAG_THRESHOLD then
+				Moved = true
+				AutoDock = false
+			end
+			if Moved then
+				local Screen = parentGui.AbsoluteSize
+				local Size = holder.AbsoluteSize
+				holder.Position = UDim2.fromOffset(
+					math.clamp(StartPos.X + Delta.X, 0, math.max(0, Screen.X - Size.X)),
+					math.clamp(StartPos.Y + Delta.Y, 0, math.max(0, Screen.Y - Size.Y))
+				)
+			end
+		end)
+
+		Creator.AddSignal(UserInputService.InputEnded, function(Input)
+			if Pressing and (Input == DragInput or Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch) then
+				Pressing = false
+				DragInput = nil
+				Animate()
+			end
+		end)
+
+		Creator.AddSignal(button.MouseButton1Click, function()
+			if not Moved and Library.Window then
+				Library.Window:Minimize()
+			end
+		end)
 	end
-
-
-
-
-
-
-
-
-
-
 
 	self.Minimizer = holder
 

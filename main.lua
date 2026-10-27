@@ -2918,8 +2918,8 @@ Components.Tab = (function()
 
 				self.SubTabHolder = New("ScrollingFrame", {
 					Name = "SubTabHolder",
-					Size = UDim2.new(1, -20, 0, 40),
-					Position = UDim2.fromOffset(1, 8),
+					Size = UDim2.new(1, 0, 0, 40),
+					Position = UDim2.fromOffset(0, 8),
 					BackgroundTransparency = 1,
 					Parent = self.ContainerFrame,
 					ScrollingDirection = Enum.ScrollingDirection.X,
@@ -2945,8 +2945,8 @@ Components.Tab = (function()
 				-- Đường kẻ phân cách dưới hàng tab con
 				New("Frame", {
 					Name = "SubTabDivider",
-					Size = UDim2.new(1, -2, 0, 1),
-					Position = UDim2.fromOffset(1, 48),
+					Size = UDim2.new(1, 0, 0, 1),
+					Position = UDim2.fromOffset(0, 48),
 					BackgroundTransparency = 0.88,
 					BorderSizePixel = 0,
 					Parent = self.ContainerFrame,
@@ -2956,8 +2956,8 @@ Components.Tab = (function()
 				})
 
 				local SubTabContainerHolder = New("Frame", {
-					Size = UDim2.new(1, -2, 1, -60),
-					Position = UDim2.fromOffset(1, 52),
+					Size = UDim2.new(1, 7, 1, -60), -- phủ hết bề ngang (bù padding 1+6 của tab mẹ) để dùng chung khoảng trống
+					Position = UDim2.fromOffset(-1, 52),
 					BackgroundTransparency = 1,
 					ClipsDescendants = true,
 					Parent = self.ContainerFrame,
@@ -3067,7 +3067,7 @@ Components.Tab = (function()
 					SortOrder = Enum.SortOrder.LayoutOrder,
 				}),
 				New("UIPadding", {
-					PaddingRight = UDim.new(0, 4),
+					PaddingRight = UDim.new(0, 6), -- bằng tab mẹ
 					PaddingLeft = UDim.new(0, 1),
 					PaddingTop = UDim.new(0, 1),
 					PaddingBottom = UDim.new(0, 1),

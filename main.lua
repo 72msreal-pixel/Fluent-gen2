@@ -2783,7 +2783,7 @@ Components.Tab = (function()
 		local CompactTab = Window.Compact and Icon ~= nil and Icon ~= ""
 
 		Tab.Frame = New("TextButton", {
-			Size = UDim2.new(1, 0, 0, CompactTab and 40 or 34),
+			Size = UDim2.new(1, 0, 0, 34),
 			BackgroundTransparency = 0.92,
 			Parent = Parent,
 			ZIndex = 10,
@@ -4308,7 +4308,7 @@ Components.Window = (function()
 			end
 		end
 		Window.Compact = Config.CompactTabs == true
-		Window.TabWidth = Window.Compact and (Config.CompactTabWidth or 40) or Config.TabWidth
+		Window.TabWidth = Window.Compact and (Config.CompactTabWidth or 48) or Config.TabWidth
 
 		local Selector = New("Frame", {
 			Size = UDim2.fromOffset(4, 0),
@@ -5139,7 +5139,7 @@ Components.Window = (function()
 		local LastTime = 0
 		Window.SelectorPosMotor:onStep(function(Value)
 			local base = Window.TabHolderTop or 45
-			local verticalInset = Window.Compact and 19 or 16
+			local verticalInset = 16
 			local selectorY = base + Value + verticalInset
 
 			local searchOffset = Window.HasImage and (Window.ImageSize + Window.TopOffset + 10) or Window.TopOffset

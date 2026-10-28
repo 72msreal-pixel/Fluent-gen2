@@ -1674,7 +1674,6 @@ local function MiniMessageToRichText(text)
 	return result
 end
 
--- Fluent language subsystem. Original source strings are never read back from translated UI.
 do
     local LM = {
         Records = {}, Cache = {}, Failed = {}, Listeners = {}, Dropdowns = {},
@@ -1764,7 +1763,6 @@ do
         if translating then
             record.Language = found and self.CurrentLanguage or (anyFound and "mixed" or self.Config.SourceLanguage)
         end
-        -- Ghi nho moi chuoi do CHINH lib viet ra, de sau nay khong nhan nham chuoi da dich thanh chuoi GOC moi.
         if translating and value ~= record.Source then
             record.Produced = record.Produced or {}
             record.Produced[value] = true
@@ -1773,7 +1771,6 @@ do
         if record.Object[record.Property] ~= value then record.Object[record.Property] = value end
     end
 
-    -- Ban do nguoc CHI cho cac chuoi lib da tu tao ra: chuoi dich -> chuoi goc (false neu trung nhieu goc).
     function LM:Remember(value, source)
         local old = self.Reverse[value]
         if old == nil then self.Reverse[value] = source
@@ -1799,7 +1796,6 @@ do
     function LM:Track(object, properties)
         if self.Dead or not (object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox")) then return end
         properties = properties or {}
-        -- Track lai cung 1 object se de 2 record gianh nhau 1 text (gay ket ngon ngu) -> go record cu truoc.
         if self.Records[object] then self:Untrack(object) end
         if properties.RichText == nil then object.RichText = true end
         local records = {}
@@ -1816,12 +1812,10 @@ do
             table.insert(record.Connections, object:GetPropertyChangedSignal(property):Connect(function()
                 local current = object[property]
                 if current == record.Expected then return end
-                -- Chuoi do chinh record nay tung hien thi (tin hieu tre/doi ngon ngu nhanh): dat lai, KHONG coi la goc moi.
                 if record.Produced and record.Produced[current] and current ~= record.Source then
                     self:Apply(record)
                     return
                 end
-                -- UI lib copy chu da dich tu label khac sang day: quy ve chuoi goc cua no thay vi nhan nham chu da dich lam goc.
                 local known = (not record.Parts) and self.Reverse[current] or nil
                 if known and known ~= current and current ~= record.Source then
                     record.Source, record.Parts = known, nil
@@ -1829,7 +1823,6 @@ do
                     self:Schedule()
                     return
                 end
-                -- External assignments are new SOURCE strings.
                 record.Source, record.Parts = current, nil
                 self:Apply(record)
                 self:Schedule()
@@ -1891,14 +1884,13 @@ do
         if type(data.Translations) == "table" then
             for code, dict in pairs(data.Translations) do
                 local normalized = self:Code(code)
-                -- Khoi ngon ngu goc chi de doi chieu/tham khao, khong doc nguoc vao bo nho dich.
                 if normalized and normalized ~= self.Config.SourceLanguage and type(dict) == "table" then
                     self.Cache[normalized] = self.Cache[normalized] or {}
                     self.Marks[normalized] = self.Marks[normalized] or {}
                     for source, entry in pairs(dict) do
                         if type(source) == "string" then
                             if type(entry) == "string" then
-                                self.Cache[normalized][source] = entry -- dinh dang cu (v1): chua duoc kiem chung
+                                self.Cache[normalized][source] = entry
                             elseif type(entry) == "table" and type(entry.t) == "string" then
                                 if entry.m == "bad" then
                                     self.Bad[normalized] = self.Bad[normalized] or {}
@@ -1931,8 +1923,6 @@ do
                     end
                 end
             end
-            -- Moi ngon ngu 1 khoi rieng: en = {chu goc}, vi = {chu = {t = ban dich, m = danh dau}}, ...
-            -- m: "source" (chu goc) | "new" (chua kiem tra) | "ok" (da kiem chung) | "fixed" (da tu sua) | "bad" (loi, khong dung)
             local blocks = {}
             for code, dict in pairs(self.Cache) do
                 local block = {}
@@ -1974,8 +1964,6 @@ do
         if type(self.Config.Request) == "function" then
             return self.Config.Request({Url = url, Method = "GET", Timeout = 15})
         end
-        -- Thu lan luot nhieu endpoint Google (429 thuong theo tung host/IP) va ca HttpGet lan request().
-        -- Bat ky phan hoi nao bat dau bang "[" (JSON) deu duoc coi la thanh cong.
         local hosts = {
             "https://translate.googleapis.com/translate_a/single",
             "https://clients5.google.com/translate_a/single",
@@ -2068,13 +2056,11 @@ do
             value = value:match("^%s*(.-)%s*$")
             value = self:Restore(value, item.Tags)
             if not value or (value == "" and item.Source:match("%S")) then error("Invalid protected text; source text retained") end
-            -- Preserve the source's outer spacing, not the batching newlines.
             translated[index] = (item.Source:match("^%s*") or "") .. value .. (item.Source:match("%s*$") or "")
         end
         return translated
     end
 
-    -- Loi do Google tra ve sai dinh dang (mat/doi marker...) chu khong phai loi mang.
     function LM:IsFormatError(reason)
         reason = tostring(reason)
         return reason:find("Batch ", 1, true) ~= nil or reason:find("Invalid protected", 1, true) ~= nil
@@ -2103,7 +2089,6 @@ do
             end)
             if ok then return result end
             reason = tostring(result)
-            -- Sai dinh dang: gui lai y het cung khong khac di, de SendBatch tu chia nho.
             if self:IsFormatError(reason) then return nil, reason end
             if attempt < self.Config.MaxRetries then
                 task.wait(math.min(30, retryAfter or (2 ^ (attempt + 1))))
@@ -2112,7 +2097,6 @@ do
         return nil, reason
     end
 
-    -- Dich 1 chuoi bat ky (khong marker). from/to la ma ngon ngu; tra ve chuoi da cat khoang trang.
     function LM:Plain(text, from, to, epoch, language)
         if self.Dead or self.Epoch ~= epoch or self.CurrentLanguage ~= language then return nil, "cancelled" end
         local pause = self.Config.RequestInterval - (os.clock() - self.LastRequest)
@@ -2139,7 +2123,6 @@ do
         return nil, tostring(result)
     end
 
-    -- Dich 1 chuoi khong dung marker (dung khi marker bi Google lam hong, thuong gap voi tieng Trung/Nhat...).
     function LM:SendPlain(item, language, epoch)
         if #item.Tags > 0 then return nil, "Protected tags; source retained" end
         local value, why = self:Plain(item.Text, self.Config.SourceLanguage, language, epoch, language)
@@ -2147,10 +2130,6 @@ do
         return (item.Source:match("^%s*") or "") .. value .. (item.Source:match("%s*$") or "")
     end
 
-    ------------------------------------------------------------------
-    -- KIEM CHUNG BAN DICH: phat hien chu sai/ket ngon ngu khac bang cach doi chieu
-    -- voi chinh chu goc va cac ngon ngu khac, roi tu dich lai de sua.
-    ------------------------------------------------------------------
     local VIET_SINGLE = {[0x110] = true, [0x111] = true, [0x1A0] = true, [0x1A1] = true, [0x1AF] = true, [0x1B0] = true}
     local OWN = {
         zh = {"cjk"}, ja = {"kana", "cjk"}, ko = {"hangul", "cjk"}, th = {"thai"},
@@ -2181,7 +2160,6 @@ do
         return c
     end
 
-    -- Ban dich cua cung 1 chu goc o CAC NGON NGU KHAC da duoc tin cay (thu cong hoac da kiem chung).
     function LM:Others(source, language)
         local out = {}
         for code, dict in pairs(self.Config.Translations) do
@@ -2199,7 +2177,6 @@ do
         return out
     end
 
-    -- Tra ve nil neu ban dich hop ly, nguoc lai tra ve ly do nghi sai.
     function LM:Check(language, source, value)
         if type(value) ~= "string" or value:match("^%s*$") then return "empty" end
         local prefix = language:match("^[a-z]+") or language
@@ -2208,7 +2185,6 @@ do
         if own then for _, key in ipairs(own) do allowed[key] = true end end
         if prefix == "vi" then allowed.viet = true end
         local sc, vc = scriptCounts(source), scriptCounts(value)
-        -- 1) chu cua ngon ngu khac lot vao (vd tieng Viet trong ban Trung, chu Han trong ban Viet)
         for key, count in pairs(vc) do
             if count > 0 and not allowed[key] and sc[key] == 0 then return "foreign-script:" .. key end
         end
@@ -2222,7 +2198,7 @@ do
             for _, other in pairs(others) do
                 if other:lower():find(lowerWord, 1, true) then n = n + 1 end
             end
-            return n >= 2 -- tu rieng/thuat ngu duoc giu nguyen o nhieu ngon ngu thi khong tinh la loi
+            return n >= 2
         end
         local function mixed()
             for word in value:gmatch("%a+") do
@@ -2234,19 +2210,16 @@ do
         if own then
             local ownCount = 0
             for _, key in ipairs(own) do ownCount = ownCount + vc[key] end
-            -- 2) ngon ngu dich dung chu rieng ma khong co chu nao => con nguyen tieng goc
             if ownCount == 0 then
                 if has3 and not source:match("^[%u%d%s%p]+$") then return "untranslated" end
                 return nil
             end
-            -- 3) co chu dich nhung con sot tu goc ("Travel toc do")
             return mixed()
         end
         if prefix == "vi" and vc.viet > 0 then
             local reason = mixed()
             if reason then return reason end
         end
-        -- 4) doi chieu: nhieu ngon ngu khac deu doi chu nay nhung ban nay van y nguyen chu goc
         if has4 and value:lower() == source:lower() then
             local differ, total = 0, 0
             for _, other in pairs(others) do
@@ -2258,21 +2231,18 @@ do
         return nil
     end
 
-    -- Sua 1 ban dich nghi sai. Tra ve (gia tri, "ok"|"fixed") | (nil, "bad") | (nil, "net") | (nil, "cancelled").
     function LM:Repair(language, source, value, reason, epoch)
-        if source:find("<", 1, true) then return value, "ok" end -- chuoi co the dinh dang: giu nguyen
+        if source:find("<", 1, true) then return value, "ok" end
         local lead, tail = source:match("^%s*") or "", source:match("%s*$") or ""
         local fresh, why = self:Plain(source, self.Config.SourceLanguage, language, epoch, language)
         if why == "cancelled" then return nil, "cancelled" end
         if fresh then
             fresh = lead .. fresh .. tail
-            -- Hai lan dich doc lap (batch va don le) cho cung ket qua => tin cay, khong phai loi.
             if fresh == value then return value, "ok" end
             if not self:Check(language, source, fresh) then return fresh, "fixed" end
         elseif not self:IsFormatError(why) then
             return nil, "net"
         end
-        -- Doi chieu qua ngon ngu khac: dich ban da kiem chung cua ngon ngu khac sang ngon ngu nay.
         local codes = {}
         for code in pairs(self:Others(source, language)) do table.insert(codes, code) end
         table.sort(codes)
@@ -2336,8 +2306,6 @@ do
         if skipped then self.Pending = true end
     end
 
-    -- Gui theo batch; neu Google lam hong marker thi chia doi batch, toi 1 chuoi thi dich khong marker.
-    -- Tra ve bang ket qua theo thu tu (co the thieu vai muc) hoac nil, ly do.
     function LM:SendBatch(items, language, epoch)
         local result, reason = self:Send(items, language, epoch)
         if result then return result end
@@ -2361,9 +2329,6 @@ do
         return merged, ra or rb
     end
 
-    ------------------------------------------------------------------
-    -- THONG BAO tien trinh dich: bat dau / thanh cong / that bai (moi ngon ngu 1 lan, khong lap).
-    ------------------------------------------------------------------
     local MESSAGES = {
         en = {Title = "Language", Start = "Translating to %s...", Done = "Translation complete (%s)", Fail = "Translation failed (%s), will retry shortly"},
         vi = {Title = "Ngôn ngữ", Start = "Đang dịch sang %s...", Done = "Dịch thành công (%s)", Fail = "Dịch thất bại (%s), sẽ thử lại sau"},
@@ -2379,8 +2344,6 @@ do
         ru = {Title = "Язык", Start = "Перевод на %s...", Done = "Перевод завершён (%s)", Fail = "Ошибка перевода (%s), повтор позже"},
     }
 
-    -- kind: "Start" | "Done" | "Fail". Chu thong bao da duoc chon san theo ngon ngu dang hien thi
-    -- va bi loai khoi dich tu dong (tranh vong lap: thong bao -> chu moi -> dich -> thong bao).
     function LM:Toast(kind, language)
         if self.Dead or not self.Config.Notifications then return end
         local code = language:match("^[a-z]+") or language
@@ -2406,7 +2369,6 @@ do
         end
     end
 
-    -- Hen gio dich lai phan bi loi (truoc day loi 1 lan la ket o tieng goc cho den khi doi ngon ngu).
     function LM:Retry()
         if self.Dead or self.RetryScheduled then return end
         self.FailCount = (self.FailCount or 0) + 1
@@ -2444,9 +2406,9 @@ do
                 end
             end
             if #batch == 0 then
-                self:Audit(language, epoch) -- het viec dich: kiem tra/sua cac ban dich nghi sai
-                if self.ToastStart == language and self.ToastDone ~= language and not self.Pending and not self.Dead then
-                    self.ToastDone = language
+                self:Audit(language, epoch)
+                if self.ToastDone ~= language and not self.Pending and not self.Dead then
+                    self.ToastStart, self.ToastDone, self.ToastFail = language, language, nil
                     self:Toast("Done", language)
                 end
                 break
@@ -2471,20 +2433,17 @@ do
                             self.Failed[language][item.Source] = os.clock() + self.Config.RetryCooldown
                         end
                     end
-                    -- Re-resolve against CURRENT locale and CURRENT source; never write stale request results directly.
                     self:ApplyAll()
                     self:ScheduleSave()
                     if missing then self:Retry() else self.FailCount = 0 end
                 elseif reason ~= "cancelled" and self.CurrentLanguage == language then
                     if self:IsFormatError(reason) then
-                        -- Chi batch nay loi dinh dang: danh dau rieng batch, tiep tuc cac batch khac.
                         for _, item in ipairs(batch) do
                             self.Failed[language][item.Source] = os.clock() + self.Config.RetryCooldown
                         end
                         self:Error(reason)
                         self:Retry()
                     else
-                        -- Loi mang/429: dung het, dung don dap Google, hen gio thu lai.
                         for _, source in ipairs(sources) do
                             self.Failed[language][source] = os.clock() + self.Config.RetryCooldown
                         end
@@ -2507,7 +2466,6 @@ do
         task.delay(self.Config.Debounce, function()
             self.Scheduled = false
             if self.Dead then return end
-            -- Truoc day: dang Busy thi bo luon yeu cau => text moi/ngon ngu moi bi ket tieng goc.
             if self.Busy then self.Pending = true; return end
             self.Busy = true
             local ok, err = pcall(function() self:Work() end)
@@ -2740,8 +2698,6 @@ end
 function Creator.New(Name, Properties, Children)
 	local Object = Instance.new(Name)
 
-	-- Tat dich tu dong cua Roblox (AutoLocalize): neu khong, Roblox tu dich cac tu thong dung theo
-	-- ngon ngu may ("Combat"->"Chien dau", "Fly"->"Bay", "Travel speed"->"Travel toc do") de len chu cua lib.
 	if Name == "TextLabel" or Name == "TextButton" or Name == "TextBox" then
 		pcall(function() Object.AutoLocalize = false end)
 	end

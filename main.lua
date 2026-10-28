@@ -1969,6 +1969,14 @@ do
             "https://clients5.google.com/translate_a/single",
             "https://translate.google.com/translate_a/single",
         }
+        -- Remember the endpoint that worked last time and try it first (saves a failed round trip per request).
+        if self.GoodHost and self.GoodHost > 1 then
+            local first = table.remove(hosts, self.GoodHost)
+            table.insert(hosts, 1, first)
+        end
+        local hostIndex = {
+            ["translate.googleapis.com"] = 1, ["clients5.google.com"] = 2, ["translate.google.com"] = 3,
+        }
         local query = url:match("%?(.*)$") or ""
         local sender = request or http_request or (syn and syn.request) or (http and http.request)
         local problems = {}
@@ -1976,12 +1984,16 @@ do
             local target = host .. "?" .. query
             if host:find("clients5", 1, true) then target = target:gsub("client=gtx", "client=dict-chrome-ex") end
             local okGet, body = pcall(function() return game:HttpGet(target) end)
-            if okGet and type(body) == "string" and body:sub(1, 1) == "[" then return body end
+            if okGet and type(body) == "string" and body:sub(1, 1) == "[" then
+                self.GoodHost = hostIndex[host:match("//([^/]+)") or ""] or self.GoodHost
+                return body
+            end
             table.insert(problems, (host:match("//([^/]+)") or host) .. " HttpGet: " .. (okGet and "bad body" or tostring(body):sub(1, 60)))
             if type(sender) == "function" then
                 local okReq, res = pcall(sender, {Url = target, Method = "GET", Timeout = 15})
                 local status = okReq and type(res) == "table" and tonumber(res.StatusCode or res.Status) or 0
                 if okReq and type(res) == "table" and status >= 200 and status < 300 and type(res.Body) == "string" and res.Body:sub(1, 1) == "[" then
+                    self.GoodHost = hostIndex[host:match("//([^/]+)") or ""] or self.GoodHost
                     return res.Body
                 end
                 table.insert(problems, (host:match("//([^/]+)") or host) .. " request: " .. (okReq and ("HTTP " .. status) or tostring(res):sub(1, 60)))
@@ -2067,15 +2079,22 @@ do
             or reason:find("Unexpected", 1, true) ~= nil or reason:find("Empty translation", 1, true) ~= nil
     end
 
+    -- Reserve the next request slot. Safe with several workers: there is no yield between read and write,
+    -- so each worker gets its own slot RequestInterval apart instead of all firing at the same time.
+    function LM:Pace()
+        local now = os.clock()
+        local slot = math.max(now, self.NextSlot or 0)
+        self.NextSlot = slot + self.Config.RequestInterval
+        if slot > now then task.wait(slot - now) end
+    end
+
     function LM:Send(items, language, epoch)
         local url = self:URL(items, language)
         local reason = "Translation failed"
         for attempt = 0, self.Config.MaxRetries do
             if self.Dead or self.Epoch ~= epoch or self.CurrentLanguage ~= language then return nil, "cancelled" end
-            local pause = self.Config.RequestInterval - (os.clock() - self.LastRequest)
-            if pause > 0 then task.wait(pause) end
+            self:Pace()
             if self.Dead or self.Epoch ~= epoch or self.CurrentLanguage ~= language then return nil, "cancelled" end
-            self.LastRequest = os.clock()
             local status, retryAfter = 0, nil
             local ok, result = pcall(function()
                 local response = self:HTTP(url)
@@ -2099,10 +2118,8 @@ do
 
     function LM:Plain(text, from, to, epoch, language)
         if self.Dead or self.Epoch ~= epoch or self.CurrentLanguage ~= language then return nil, "cancelled" end
-        local pause = self.Config.RequestInterval - (os.clock() - self.LastRequest)
-        if pause > 0 then task.wait(pause) end
+        self:Pace()
         if self.Dead or self.Epoch ~= epoch or self.CurrentLanguage ~= language then return nil, "cancelled" end
-        self.LastRequest = os.clock()
         local url = "https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&ie=UTF-8&oe=UTF-8&sl="
             .. httpService:UrlEncode(from) .. "&tl=" .. httpService:UrlEncode(to)
             .. "&q=" .. httpService:UrlEncode(text)
@@ -2380,83 +2397,130 @@ do
         end)
     end
 
+    -- Build every batch for this round in a single pass. URL length is tracked incrementally
+    -- (URL-encoding is per character, so encoded pieces simply add up) instead of re-encoding
+    -- the whole batch for each added string, which was O(n^2).
+    function LM:BuildBatches(sources, language)
+        local batches, batch = {}, {}
+        local base = #self:URL({}, language)
+        local markerLen = #httpService:UrlEncode(string.format("ZXQB%06dQXZ\n", 1)) + #httpService:UrlEncode("\n")
+        local used = base
+        local limit, maxItems = self.Config.MaxURLLength, self.Config.BatchSize
+        for _, source in ipairs(sources) do
+            if self:NeedsTranslation(source, language) then
+                local text, tags = self:Protect(source)
+                if text then
+                    local size = markerLen + #httpService:UrlEncode(text)
+                    if base + size > limit then
+                        self.Failed[language] = self.Failed[language] or {}
+                        self.Failed[language][source] = os.clock() + self.Config.RetryCooldown
+                        self:Error("Text exceeds batch URL limit; supply a manual translation or shorten this source")
+                    else
+                        if #batch > 0 and (used + size > limit or #batch >= maxItems) then
+                            table.insert(batches, batch)
+                            batch, used = {}, base
+                        end
+                        table.insert(batch, {Source = source, Text = text, Tags = tags})
+                        used = used + size
+                    end
+                else
+                    self.Failed[language] = self.Failed[language] or {}
+                    self.Failed[language][source] = os.clock() + self.Config.RetryCooldown
+                    self:Error("Source contains reserved ZXQ markers; supply a manual translation")
+                end
+            end
+        end
+        if #batch > 0 then table.insert(batches, batch) end
+        return batches
+    end
+
+    -- Handle the result of one batch. Returns "net" when the whole round should stop (network failure).
+    function LM:HandleResult(batch, result, reason, language, epoch, sources)
+        if self.Dead or epoch ~= self.Epoch then return end
+        self.Failed[language] = self.Failed[language] or {}
+        if result then
+            self.Cache[language] = self.Cache[language] or {}
+            local missing = false
+            for index, item in ipairs(batch) do
+                if type(result[index]) == "string" then
+                    self.Cache[language][item.Source] = result[index]
+                    if self.Marks[language] then self.Marks[language][item.Source] = nil end
+                else
+                    missing = true
+                    self.Failed[language][item.Source] = os.clock() + self.Config.RetryCooldown
+                end
+            end
+            -- Show this batch right away instead of waiting for the whole round.
+            self:ApplyAll()
+            self:ScheduleSave()
+            if missing then self:Retry() else self.FailCount = 0 end
+        elseif reason ~= "cancelled" and self.CurrentLanguage == language then
+            if self:IsFormatError(reason) then
+                for _, item in ipairs(batch) do
+                    self.Failed[language][item.Source] = os.clock() + self.Config.RetryCooldown
+                end
+                self:Error(reason)
+                self:Retry()
+            else
+                for _, source in ipairs(sources) do
+                    self.Failed[language][source] = os.clock() + self.Config.RetryCooldown
+                end
+                self:Error(reason)
+                self:Retry()
+                if self.ToastFail ~= language then
+                    self.ToastFail = language
+                    self:Toast("Fail", language)
+                end
+                return "net"
+            end
+        end
+    end
+
+    -- Send all batches with several workers in parallel (Config.Concurrency).
+    function LM:RunBatches(batches, language, epoch, sources)
+        local nextIndex, running, stop = 1, 0, false
+        local workers = math.max(1, math.min(self.Config.Concurrency, #batches))
+        for _ = 1, workers do
+            running = running + 1
+            task.spawn(function()
+                while not stop and not self.Dead and epoch == self.Epoch do
+                    local index = nextIndex
+                    if index > #batches then break end
+                    nextIndex = index + 1
+                    local batch = batches[index]
+                    local ok, result, reason = pcall(function() return self:SendBatch(batch, language, epoch) end)
+                    if not ok then result, reason = nil, tostring(result) end
+                    local handled, flag = pcall(self.HandleResult, self, batch, result, reason, language, epoch, sources)
+                    if not handled then self:Error(flag) end
+                    if flag == "net" then stop = true end
+                end
+                running = running - 1
+            end)
+        end
+        while running > 0 do task.wait() end
+        return stop
+    end
+
     function LM:Work()
         while self.Active and not self.Dead and self.Config.AutoTranslations do
             local epoch, language = self.Epoch, self.CurrentLanguage
             local sources = self:Collect()
-            local batch = {}
-            for _, source in ipairs(sources) do
-                if self:NeedsTranslation(source, language) then
-                    local text, tags = self:Protect(source)
-                    if text then
-                        local item = {Source = source, Text = text, Tags = tags}
-                        table.insert(batch, item)
-                        if #self:URL(batch, language) > self.Config.MaxURLLength or #batch > self.Config.BatchSize then
-                            table.remove(batch)
-                            if #batch > 0 then break end
-                            self.Failed[language] = self.Failed[language] or {}
-                            self.Failed[language][source] = os.clock() + self.Config.RetryCooldown
-                            self:Error("Text exceeds batch URL limit; supply a manual translation or shorten this source")
-                        end
-                    else
-                        self.Failed[language] = self.Failed[language] or {}
-                        self.Failed[language][source] = os.clock() + self.Config.RetryCooldown
-                        self:Error("Source contains reserved ZXQ markers; supply a manual translation")
-                    end
-                end
-            end
-            if #batch == 0 then
-                self:Audit(language, epoch)
+            local batches = self:BuildBatches(sources, language)
+            if #batches == 0 then
+                -- Everything visible is translated already: tell the user first, verify afterwards.
                 if self.ToastDone ~= language and not self.Pending and not self.Dead then
                     self.ToastStart, self.ToastDone, self.ToastFail = language, language, nil
                     self:Toast("Done", language)
                 end
+                self:Audit(language, epoch)
                 break
             end
             if language ~= self.Config.SourceLanguage and self.ToastStart ~= language then
                 self.ToastStart, self.ToastDone, self.ToastFail = language, nil, nil
                 self:Toast("Start", language)
             end
-            local result, reason = self:SendBatch(batch, language, epoch)
-            if self.Dead then break end
-            if epoch == self.Epoch then
-                self.Failed[language] = self.Failed[language] or {}
-                if result then
-                    self.Cache[language] = self.Cache[language] or {}
-                    local missing = false
-                    for index, item in ipairs(batch) do
-                        if type(result[index]) == "string" then
-                            self.Cache[language][item.Source] = result[index]
-                            if self.Marks[language] then self.Marks[language][item.Source] = nil end
-                        else
-                            missing = true
-                            self.Failed[language][item.Source] = os.clock() + self.Config.RetryCooldown
-                        end
-                    end
-                    self:ApplyAll()
-                    self:ScheduleSave()
-                    if missing then self:Retry() else self.FailCount = 0 end
-                elseif reason ~= "cancelled" and self.CurrentLanguage == language then
-                    if self:IsFormatError(reason) then
-                        for _, item in ipairs(batch) do
-                            self.Failed[language][item.Source] = os.clock() + self.Config.RetryCooldown
-                        end
-                        self:Error(reason)
-                        self:Retry()
-                    else
-                        for _, source in ipairs(sources) do
-                            self.Failed[language][source] = os.clock() + self.Config.RetryCooldown
-                        end
-                        self:Error(reason)
-                        self:Retry()
-                        if self.ToastFail ~= language then
-                            self.ToastFail = language
-                            self:Toast("Fail", language)
-                        end
-                        break
-                    end
-                end
-            end
+            local netFail = self:RunBatches(batches, language, epoch, sources)
+            if self.Dead or netFail then break end
         end
     end
 
@@ -2647,10 +2711,11 @@ do
             Languages = options.Languages or {"en", "vi", "zh-CN", "zh-TW", "ja", "ko", "fr", "de", "es", "th", "id", "pt", "ru", "ar"},
             Cache = options.Cache ~= false, CacheFile = options.CacheFile or "Fluent/LanguageCache.json",
             SaveSelection = options.SaveSelection ~= false, AutoPruneCache = options.AutoPruneCache == true,
-            Debounce = math.max(0.05, tonumber(options.Debounce) or 0.4),
-            BatchSize = math.max(1, math.floor(tonumber(options.BatchSize) or 40)),
-            MaxURLLength = math.max(512, math.min(12000, tonumber(options.MaxURLLength) or 6500)),
-            RequestInterval = math.max(0.25, tonumber(options.RequestInterval) or 1.5),
+            Debounce = math.max(0.05, tonumber(options.Debounce) or 0.2),
+            BatchSize = math.max(1, math.floor(tonumber(options.BatchSize) or 200)),
+            MaxURLLength = math.max(512, math.min(16000, tonumber(options.MaxURLLength) or 8000)),
+            Concurrency = math.max(1, math.min(8, math.floor(tonumber(options.Concurrency) or 4))),
+            RequestInterval = math.max(0.05, tonumber(options.RequestInterval) or 0.15),
             MaxRetries = math.max(0, math.min(3, math.floor(tonumber(options.MaxRetries) or 2))),
             RetryCooldown = math.max(5, tonumber(options.RetryCooldown) or 60),
             Request = options.Request, OnError = options.OnError,

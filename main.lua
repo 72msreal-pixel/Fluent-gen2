@@ -2681,6 +2681,12 @@ end
 function Creator.New(Name, Properties, Children)
 	local Object = Instance.new(Name)
 
+	-- Tat dich tu dong cua Roblox (AutoLocalize): neu khong, Roblox tu dich cac tu thong dung theo
+	-- ngon ngu may ("Combat"->"Chien dau", "Fly"->"Bay", "Travel speed"->"Travel toc do") de len chu cua lib.
+	if Name == "TextLabel" or Name == "TextButton" or Name == "TextBox" then
+		pcall(function() Object.AutoLocalize = false end)
+	end
+
 	for Name, Value in next, Creator.DefaultProperties[Name] or {} do
 		Object[Name] = Value
 	end
@@ -2747,6 +2753,7 @@ local New = Creator.New
 local GUI = New("ScreenGui", {
 	Parent = LocalPlayer:WaitForChild("PlayerGui"),
 })
+pcall(function() GUI.AutoLocalize = false end)
 Library.GUI = GUI
 ProtectGui(GUI)
 

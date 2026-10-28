@@ -2361,6 +2361,51 @@ do
         return merged, ra or rb
     end
 
+    ------------------------------------------------------------------
+    -- THONG BAO tien trinh dich: bat dau / thanh cong / that bai (moi ngon ngu 1 lan, khong lap).
+    ------------------------------------------------------------------
+    local MESSAGES = {
+        en = {Title = "Language", Start = "Translating to %s...", Done = "Translation complete (%s)", Fail = "Translation failed (%s), will retry shortly"},
+        vi = {Title = "Ngôn ngữ", Start = "Đang dịch sang %s...", Done = "Dịch thành công (%s)", Fail = "Dịch thất bại (%s), sẽ thử lại sau"},
+        zh = {Title = "语言", Start = "正在翻译为 %s...", Done = "翻译成功 (%s)", Fail = "翻译失败 (%s)，稍后重试"},
+        ja = {Title = "言語", Start = "%s に翻訳中...", Done = "翻訳が完了しました (%s)", Fail = "翻訳に失敗しました (%s)。まもなく再試行します"},
+        ko = {Title = "언어", Start = "%s(으)로 번역 중...", Done = "번역 완료 (%s)", Fail = "번역 실패 (%s), 곧 다시 시도합니다"},
+        th = {Title = "ภาษา", Start = "กำลังแปลเป็น %s...", Done = "แปลสำเร็จ (%s)", Fail = "แปลไม่สำเร็จ (%s) กำลังลองใหม่"},
+        id = {Title = "Bahasa", Start = "Menerjemahkan ke %s...", Done = "Terjemahan selesai (%s)", Fail = "Terjemahan gagal (%s), akan dicoba lagi"},
+        fr = {Title = "Langue", Start = "Traduction en %s...", Done = "Traduction terminée (%s)", Fail = "Échec de la traduction (%s), nouvel essai bientôt"},
+        de = {Title = "Sprache", Start = "Übersetze nach %s...", Done = "Übersetzung abgeschlossen (%s)", Fail = "Übersetzung fehlgeschlagen (%s), neuer Versuch folgt"},
+        es = {Title = "Idioma", Start = "Traduciendo a %s...", Done = "Traducción completada (%s)", Fail = "Error de traducción (%s), se reintentará"},
+        pt = {Title = "Idioma", Start = "Traduzindo para %s...", Done = "Tradução concluída (%s)", Fail = "Falha na tradução (%s), tentando novamente"},
+        ru = {Title = "Язык", Start = "Перевод на %s...", Done = "Перевод завершён (%s)", Fail = "Ошибка перевода (%s), повтор позже"},
+    }
+
+    -- kind: "Start" | "Done" | "Fail". Chu thong bao da duoc chon san theo ngon ngu dang hien thi
+    -- va bi loai khoi dich tu dong (tranh vong lap: thong bao -> chu moi -> dich -> thong bao).
+    function LM:Toast(kind, language)
+        if self.Dead or not self.Config.Notifications then return end
+        local code = language:match("^[a-z]+") or language
+        local custom = self.Config.Messages
+        local function pick(field)
+            local entry = type(custom) == "table" and (custom[language] or custom[code]) or nil
+            if type(entry) == "table" and type(entry[field]) == "string" then return entry[field] end
+            local default = MESSAGES[code] or MESSAGES.en
+            return default[field] or MESSAGES.en[field]
+        end
+        local ok, notification = pcall(function()
+            return Library:Notify({
+                Title = pick("Title"),
+                Content = string.format(pick(kind), language:upper()),
+                Duration = kind == "Fail" and 6 or 4,
+            })
+        end)
+        if ok and type(notification) == "table" then
+            for _, key in ipairs({"Title", "ContentLabel", "SubContentLabel"}) do
+                local object = notification[key]
+                if typeof(object) == "Instance" then pcall(object.SetAttribute, object, "FluentNoTranslate", true) end
+            end
+        end
+    end
+
     -- Hen gio dich lai phan bi loi (truoc day loi 1 lan la ket o tieng goc cho den khi doi ngon ngu).
     function LM:Retry()
         if self.Dead or self.RetryScheduled then return end
@@ -2400,7 +2445,15 @@ do
             end
             if #batch == 0 then
                 self:Audit(language, epoch) -- het viec dich: kiem tra/sua cac ban dich nghi sai
+                if self.ToastStart == language and self.ToastDone ~= language and not self.Pending and not self.Dead then
+                    self.ToastDone = language
+                    self:Toast("Done", language)
+                end
                 break
+            end
+            if language ~= self.Config.SourceLanguage and self.ToastStart ~= language then
+                self.ToastStart, self.ToastDone, self.ToastFail = language, nil, nil
+                self:Toast("Start", language)
             end
             local result, reason = self:SendBatch(batch, language, epoch)
             if self.Dead then break end
@@ -2437,6 +2490,10 @@ do
                         end
                         self:Error(reason)
                         self:Retry()
+                        if self.ToastFail ~= language then
+                            self.ToastFail = language
+                            self:Toast("Fail", language)
+                        end
                         break
                     end
                 end
@@ -2507,6 +2564,7 @@ do
         local previous = self.CurrentLanguage
         self.CurrentLanguage = code
         self.FailCount = 0
+        self.ToastStart, self.ToastDone, self.ToastFail = nil, nil, nil
         self:ApplyAll()
         self:Schedule()
         self:ScheduleSave()
@@ -2639,6 +2697,7 @@ do
             RetryCooldown = math.max(5, tonumber(options.RetryCooldown) or 60),
             Request = options.Request, OnError = options.OnError,
             Verify = options.Verify ~= false, OnRepair = options.OnRepair,
+            Notifications = options.Notifications ~= false, Messages = options.Messages,
         }
         if oldSource ~= source or oldFile ~= self.Config.CacheFile then self.Cache, self.Marks, self.Bad = {}, {}, {} end
         self.Epoch = self.Epoch + 1

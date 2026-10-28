@@ -8908,6 +8908,7 @@ ElementsTable.Colorpicker = (function()
 				Position = UDim2.fromOffset(PAD, SV_Y),
 				Image = "rbxassetid://4155801252",
 				BackgroundColor3 = Color3.fromHSV(Hue, 1, 1),
+				BackgroundTransparency = 0, -- FIX: ImageLabel mặc định = 1 nên màu Hue bị ẩn
 				Active = true,
 				Parent = Dialog.Root,
 			}, {

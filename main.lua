@@ -8743,32 +8743,34 @@ ElementsTable.Colorpicker = (function()
 			local HasAlpha = Config.Transparency ~= nil and Config.Transparency ~= false
 
 			-- ───────── Layout (compact) ─────────
-			local PAD = 12
-			local INNER = 196
+			-- Bố cục: [Khung màu | HEX,R,G,B xếp dọc] / thanh Hue (/ Alpha) / nút
+			local PAD = 16
+			local INNER = 248
 			local WIDTH = PAD * 2 + INNER
-			local SV_Y, SV_H = 34, 80
-			local HUE_Y = SV_Y + SV_H + 10
-			local ALPHA_Y = HUE_Y + 14
-			local FIELD_Y = (HasAlpha and ALPHA_Y or HUE_Y) + 18
-			local FIELD_H = 22
-			local FOOTER = 40
-			local BTN_H = 26
-			local HEIGHT = FIELD_Y + FIELD_H + 2 + 9 + 8 + FOOTER
+			local SV_Y, SV_H = 44, 104
+			local SV_W = 150
+			local COL_GAP = 10
+			local COL_X = PAD + SV_W + COL_GAP
+			local COL_W = INNER - SV_W - COL_GAP
+			local HUE_Y = SV_Y + SV_H + 12
+			local ALPHA_Y = HUE_Y + 16
+			local FOOTER = 52
+			local HEIGHT = (HasAlpha and ALPHA_Y or HUE_Y) + 8 + 14 + FOOTER
 			local CHECKER = "http://www.roblox.com/asset/?id=14204231522"
 			local FONT = "rbxasset://fonts/families/GothamSSm.json"
 
 			Dialog.Root.Size = UDim2.fromOffset(WIDTH, HEIGHT)
 
 			Dialog.Title.Text = Colorpicker.Title
-			Dialog.Title.TextSize = 13
+			Dialog.Title.TextSize = 15
 			Dialog.Title.TextTruncate = Enum.TextTruncate.AtEnd
-			Dialog.Title.Position = UDim2.fromOffset(PAD, 9)
-			Dialog.Title.Size = UDim2.new(1, -(PAD * 2 + 52), 0, 18)
+			Dialog.Title.Position = UDim2.fromOffset(PAD, 13)
+			Dialog.Title.Size = UDim2.new(1, -(PAD * 2 + 64), 0, 20)
 
 			Dialog.ButtonHolderFrame.Size = UDim2.new(1, 0, 0, FOOTER)
 			Dialog.ButtonHolderFrame.Position = UDim2.new(0, 0, 1, -FOOTER)
-			Dialog.ButtonHolder.Size = UDim2.new(1, -PAD * 2, 0, BTN_H)
-			Dialog.ButtonHolder.UIListLayout.Padding = UDim.new(0, 6)
+			Dialog.ButtonHolder.Size = UDim2.new(1, -PAD * 2, 0, 30)
+			Dialog.ButtonHolder.UIListLayout.Padding = UDim.new(0, 8)
 
 			-- ───────── State ─────────
 			local Hue, Sat, Vib = Colorpicker.Hue, Colorpicker.Sat, Colorpicker.Vib
@@ -8879,9 +8881,9 @@ ElementsTable.Colorpicker = (function()
 			})
 
 			New("CanvasGroup", {
-				Size = UDim2.fromOffset(44, 16),
+				Size = UDim2.fromOffset(56, 20),
 				AnchorPoint = Vector2.new(1, 0),
-				Position = UDim2.new(1, -PAD, 0, 10),
+				Position = UDim2.new(1, -PAD, 0, 13),
 				BackgroundTransparency = 1,
 				Parent = Dialog.Root,
 			}, {
@@ -8905,7 +8907,7 @@ ElementsTable.Colorpicker = (function()
 
 			-- ───────── Saturation / Value map ─────────
 			local SatVibMap = New("ImageLabel", {
-				Size = UDim2.fromOffset(INNER, SV_H),
+				Size = UDim2.fromOffset(SV_W, SV_H),
 				Position = UDim2.fromOffset(PAD, SV_Y),
 				Image = "rbxassetid://4155801252",
 				BackgroundColor3 = Color3.fromHSV(Hue, 1, 1),
@@ -8920,7 +8922,7 @@ ElementsTable.Colorpicker = (function()
 					Transparency = 0.75,
 				}),
 			})
-			local SatThumb, SatInner = MakeThumb(14, SatVibMap)
+			local SatThumb, SatInner = MakeThumb(18, SatVibMap)
 			local SatHit = MakeHit(SatVibMap, "SV", 0)
 			SatHit.Size = UDim2.fromScale(1, 1)
 			SatHit.AnchorPoint = Vector2.new(0, 0)
@@ -8933,15 +8935,15 @@ ElementsTable.Colorpicker = (function()
 			end
 
 			local HueBar = New("Frame", {
-				Size = UDim2.fromOffset(INNER, 6),
+				Size = UDim2.fromOffset(SV_W, 8),
 				Position = UDim2.fromOffset(PAD, HUE_Y),
 				Parent = Dialog.Root,
 			}, {
 				New("UICorner", { CornerRadius = UDim.new(1, 0) }),
 				New("UIGradient", { Color = ColorSequence.new(HueKeys) }),
 			})
-			local HueThumb, HueInner = MakeThumb(12, HueBar)
-			local HueHit = MakeHit(HueBar, "Hue", 22)
+			local HueThumb, HueInner = MakeThumb(16, HueBar)
+			local HueHit = MakeHit(HueBar, "Hue", 26)
 
 			-- ───────── Alpha bar ─────────
 			local AlphaBar, AlphaFill, AlphaThumb, AlphaInner, AlphaHit
@@ -8960,7 +8962,7 @@ ElementsTable.Colorpicker = (function()
 				})
 
 				AlphaBar = New("Frame", {
-					Size = UDim2.fromOffset(INNER, 6),
+					Size = UDim2.fromOffset(SV_W, 8),
 					Position = UDim2.fromOffset(PAD, ALPHA_Y),
 					BackgroundTransparency = 1,
 					Parent = Dialog.Root,
@@ -8977,14 +8979,21 @@ ElementsTable.Colorpicker = (function()
 					}),
 					AlphaFill,
 				})
-				AlphaThumb, AlphaInner = MakeThumb(12, AlphaBar)
-				AlphaHit = MakeHit(AlphaBar, "Alpha", 22)
+				AlphaThumb, AlphaInner = MakeThumb(16, AlphaBar)
+				AlphaHit = MakeHit(AlphaBar, "Alpha", 26)
 			end
 
-			-- ───────── Input fields (Hex | R | G | B | A) ─────────
+			-- ───────── Input fields (HEX / R / G / B / A xếp dọc bên phải khung màu) ─────────
 			local Focused = {}
+			local FieldCount = HasAlpha and 5 or 4
+			local FIELD_H = HasAlpha and 18 or 22
+			local FIELD_GAP = (SV_H - FieldCount * FIELD_H) / (FieldCount - 1)
+			local CAP_W = 18
 
-			local function MakeField(X, Width, Caption)
+			local function MakeField(Index, Caption)
+				local Y = math.floor(SV_Y + (Index - 1) * (FIELD_H + FIELD_GAP) + 0.5)
+				local Offset = Caption and CAP_W or 0
+
 				local Stroke = New("UIStroke", {
 					ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 					Transparency = 0.65,
@@ -8994,17 +9003,19 @@ ElementsTable.Colorpicker = (function()
 				local Box = New("TextBox", {
 					FontFace = Font.new(FONT, Enum.FontWeight.Medium, Enum.FontStyle.Normal),
 					Text = "",
-					TextSize = 11, TextXAlignment = Enum.TextXAlignment.Center,
+					TextSize = 12,
+					TextXAlignment = Enum.TextXAlignment.Center,
 					ClearTextOnFocus = false,
 					ClipsDescendants = true,
 					BackgroundTransparency = 1,
-					Size = UDim2.fromScale(1, 1),
+					Size = UDim2.new(1, -Offset, 1, 0),
+					Position = UDim2.fromOffset(Offset, 0),
 					ThemeTag = { TextColor3 = "Text" },
 				})
 
-				New("Frame", {
-					Size = UDim2.fromOffset(Width, FIELD_H),
-					Position = UDim2.fromOffset(X, FIELD_Y),
+				local Holder = New("Frame", {
+					Size = UDim2.fromOffset(COL_W, FIELD_H),
+					Position = UDim2.fromOffset(COL_X, Y),
 					Parent = Dialog.Root,
 					ThemeTag = { BackgroundColor3 = "DialogInput" },
 				}, {
@@ -9013,14 +9024,17 @@ ElementsTable.Colorpicker = (function()
 					Box,
 				})
 
-				New("TextLabel", {
-					FontFace = Font.new(FONT, Enum.FontWeight.Medium, Enum.FontStyle.Normal),
-					Text = Caption,
-					TextSize = 9, Size = UDim2.fromOffset(Width, 9), Position = UDim2.fromOffset(X, FIELD_Y + FIELD_H + 2),
-					BackgroundTransparency = 1,
-					Parent = Dialog.Root,
-					ThemeTag = { TextColor3 = "SubText" },
-				})
+				if Caption then
+					New("TextLabel", {
+						FontFace = Font.new(FONT, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal),
+						Text = Caption,
+						TextSize = 11,
+						Size = UDim2.fromOffset(CAP_W, FIELD_H),
+						BackgroundTransparency = 1,
+						Parent = Holder,
+						ThemeTag = { TextColor3 = "SubText" },
+					})
+				end
 
 				table.insert(
 					Connections,
@@ -9044,17 +9058,13 @@ ElementsTable.Colorpicker = (function()
 				end
 			end
 
-			local GAP = 4 local ChannelCount = HasAlpha and 4 or 3
-			local BoxWidth = HasAlpha and 30 or 38
-			local HexWidth = INNER - ChannelCount * (BoxWidth + GAP)
-
-			local HexBox, OnHex = MakeField(PAD, HexWidth, "HEX")
-			local RedBox, OnRed = MakeField(PAD + HexWidth + GAP, BoxWidth, "R")
-			local GreenBox, OnGreen = MakeField(PAD + HexWidth + GAP + (BoxWidth + GAP), BoxWidth, "G")
-			local BlueBox, OnBlue = MakeField(PAD + HexWidth + GAP + (BoxWidth + GAP) * 2, BoxWidth, "B")
+			local HexBox, OnHex = MakeField(1, nil)
+			local RedBox, OnRed = MakeField(2, "R")
+			local GreenBox, OnGreen = MakeField(3, "G")
+			local BlueBox, OnBlue = MakeField(4, "B")
 			local AlphaBox, OnAlpha
 			if HasAlpha then
-				AlphaBox, OnAlpha = MakeField(PAD + HexWidth + GAP + (BoxWidth + GAP) * 3, BoxWidth, "A %")
+				AlphaBox, OnAlpha = MakeField(5, "A")
 			end
 
 			-- ───────── Footer buttons ─────────
@@ -9068,7 +9078,7 @@ ElementsTable.Colorpicker = (function()
 
 			for _, Child in next, Dialog.ButtonHolder:GetChildren() do
 				if Child:IsA("TextButton") then
-					Child.Size = UDim2.new(Child.Size.X.Scale, Child.Size.X.Offset, 0, BTN_H)
+					Child.Size = UDim2.new(Child.Size.X.Scale, Child.Size.X.Offset, 0, 30)
 				end
 			end
 

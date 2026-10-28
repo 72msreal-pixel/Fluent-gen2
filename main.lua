@@ -4914,6 +4914,10 @@ Components.Dialog = (function()
 	function Dialog:Create()
 		local NewDialog = {
 			Buttons = 0,
+			ButtonHeight = 32,
+			ButtonRadius = 4,
+			TintAmount = 0.75,
+			Closed = false,
 		}
 
 		NewDialog.TintFrame = New("TextButton", {
@@ -4983,13 +4987,23 @@ Components.Dialog = (function()
 			Scale = 1,
 		})
 
-		local ScaleMotor, Scale = Creator.SpringMotor(1.1, NewDialog.Scale, "Scale")
+		local ScaleMotor = Flipper.SingleMotor.new(0.92)
+		ScaleMotor:onStep(function(Value)
+			NewDialog.Scale.Scale = Value
+		end)
+		local function Scale(Value, Bouncy)
+			ScaleMotor:setGoal(Spring(Value, {
+				frequency = Bouncy and 6 or 9,
+				dampingRatio = Bouncy and 0.72 or 1,
+			}))
+		end
 
 		NewDialog.Root = New("CanvasGroup", {
 			Size = UDim2.fromOffset(300, 165),
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.fromScale(0.5, 0.5),
 			GroupTransparency = 1,
+			Active = true,
 			Parent = NewDialog.TintFrame,
 			ThemeTag = {
 				BackgroundColor3 = "Dialog",
@@ -5013,23 +5027,58 @@ Components.Dialog = (function()
 
 		function NewDialog:Open()
 			Library.DialogOpen = true
-			NewDialog.Scale.Scale = 1.1
-			TintTransparency(0.75)
+			NewDialog.Scale.Scale = 0.92
+			TintTransparency(NewDialog.TintAmount)
 			RootTransparency(0)
-			Scale(1)
+			Scale(1, true)
 		end
 
 		function NewDialog:Close()
+			if NewDialog.Closed then
+				return
+			end
+			NewDialog.Closed = true
 			Library.DialogOpen = false
 			TintTransparency(1)
 			RootTransparency(1)
-			Scale(1.1)
+			Scale(0.92)
 			NewDialog.Root.UIStroke:Destroy()
-			task.wait(0.15)
+			task.wait(0.18)
 			NewDialog.TintFrame:Destroy()
 		end
 
-		function NewDialog:Button(Title, Callback)
+		local function StyleButton(Button, Style)
+			local Stroke = Button.Frame:FindFirstChildOfClass("UIStroke")
+			if Style == "Primary" then
+				Creator.OverrideTag(Button.Frame, { BackgroundColor3 = "Accent" })
+				local Accent = Creator.GetThemeProperty("Accent")
+				local Lum = 0.299 * Accent.R + 0.587 * Accent.G + 0.114 * Accent.B
+				Creator.OverrideTag(Button.Title, {})
+				Button.Title.TextColor3 = Lum > 0.6 and Color3.fromRGB(16, 16, 20) or Color3.fromRGB(255, 255, 255)
+				Button.Title.FontFace = Font.new(
+					"rbxasset://fonts/families/GothamSSm.json",
+					Enum.FontWeight.SemiBold,
+					Enum.FontStyle.Normal
+				)
+				if Stroke then
+					Stroke.Transparency = 1
+				end
+			elseif Style == "Danger" then
+				local Red = Color3.fromRGB(225, 72, 72)
+				Creator.OverrideTag(Button.Frame, {})
+				Button.Frame.BackgroundColor3 = Red
+				Button.Frame.BackgroundTransparency = 0.8
+				Creator.OverrideTag(Button.Title, {})
+				Button.Title.TextColor3 = Color3.fromRGB(240, 95, 95)
+				if Stroke then
+					Creator.OverrideTag(Stroke, {})
+					Stroke.Color = Red
+					Stroke.Transparency = 0.55
+				end
+			end
+		end
+
+		function NewDialog:Button(Title, Callback, Style)
 			NewDialog.Buttons = NewDialog.Buttons + 1
 			Title = Title or "Button"
 			Callback = Callback or function() end
@@ -5037,12 +5086,37 @@ Components.Dialog = (function()
 			local Button = Components.Button("", NewDialog.ButtonHolder, true)
 			Button.Title.Text = Title
 
-			for _, Btn in next, NewDialog.ButtonHolder:GetChildren() do
-				if Btn:IsA("TextButton") then
-					Btn.Size =
-						UDim2.new(1 / NewDialog.Buttons, -(((NewDialog.Buttons - 1) * 10) / NewDialog.Buttons), 0, 32)
+			for _, Corner in next, Button.Frame:GetDescendants() do
+				if Corner:IsA("UICorner") then
+					Corner.CornerRadius = UDim.new(0, NewDialog.ButtonRadius)
 				end
 			end
+
+			for _, Btn in next, NewDialog.ButtonHolder:GetChildren() do
+				if Btn:IsA("TextButton") then
+					Btn.Size = UDim2.new(
+						1 / NewDialog.Buttons,
+						-(((NewDialog.Buttons - 1) * 10) / NewDialog.Buttons),
+						0,
+						NewDialog.ButtonHeight
+					)
+				end
+			end
+
+			StyleButton(Button, Style)
+
+			-- press feedback (there is no hover on mobile)
+			local PressScale = Creator.New("UIScale", { Scale = 1, Parent = Button.Frame })
+			local _, SetPress = Creator.SpringMotor(1, PressScale, "Scale", true)
+			Creator.AddSignal(Button.Frame.MouseButton1Down, function()
+				SetPress(0.95)
+			end)
+			Creator.AddSignal(Button.Frame.MouseButton1Up, function()
+				SetPress(1)
+			end)
+			Creator.AddSignal(Button.Frame.MouseLeave, function()
+				SetPress(1)
+			end)
 
 			Creator.AddSignal(Button.Frame.MouseButton1Click, function()
 				Library:SafeCallback(Callback)
@@ -5569,15 +5643,19 @@ Components.TitleBar = (function()
 			Library.Window:Dialog({
 				Title = "Close",
 				Content = "Are you sure you want to unload the interface?",
+				Icon = Library:GetIcon("log-out") and "log-out" or (Library:GetIcon("power") and "power" or nil),
+				Tone = "Danger",
 				Buttons = {
 					{
 						Title = "Yes",
+						Style = "Danger",
 						Callback = function()
 							Library:Destroy()
 						end,
 					},
 					{
 						Title = "No",
+						Style = "Primary",
 					},
 				},
 			})
@@ -6928,6 +7006,59 @@ Components.Window = (function()
 			local Dialog = DialogModule:Create()
 			Dialog.Title.Text = Config.Title
 
+			local HasIcon = Config.Icon ~= nil and Library:GetIcon(Config.Icon) ~= nil
+			local Danger = Config.Tone == "Danger"
+			local TopOffset = HasIcon and 66 or 60
+			local FooterHeight = 64
+
+			Dialog.ButtonHeight = 36
+			Dialog.ButtonRadius = 6
+			Dialog.TintAmount = 0.55
+
+			-- flat footer: no divider line, buttons centered vertically
+			Dialog.ButtonHolderFrame.BackgroundTransparency = 1
+			for _, Child in next, Dialog.ButtonHolderFrame:GetChildren() do
+				if Child:IsA("Frame") and Child ~= Dialog.ButtonHolder then
+					Child.BackgroundTransparency = 1
+				end
+			end
+			Dialog.ButtonHolderFrame.Size = UDim2.new(1, 0, 0, FooterHeight)
+			Dialog.ButtonHolderFrame.Position = UDim2.new(0, 0, 1, -FooterHeight)
+			Dialog.ButtonHolder.Size = UDim2.new(1, -40, 1, -16)
+			Dialog.ButtonHolder.UIListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+
+			if HasIcon then
+				local Red = Color3.fromRGB(225, 72, 72)
+				local IconProps = {
+					Size = UDim2.fromOffset(18, 18),
+					Position = UDim2.fromScale(0.5, 0.5),
+					AnchorPoint = Vector2.new(0.5, 0.5),
+					BackgroundTransparency = 1,
+				}
+				local CircleProps = {
+					Size = UDim2.fromOffset(36, 36),
+					Position = UDim2.fromOffset(20, 18),
+					BackgroundTransparency = 0.85,
+					Parent = Dialog.Root,
+				}
+				if Danger then
+					IconProps.ImageColor3 = Color3.fromRGB(240, 95, 95)
+					CircleProps.BackgroundColor3 = Red
+				else
+					IconProps.ThemeTag = { ImageColor3 = "Accent" }
+					CircleProps.ThemeTag = { BackgroundColor3 = "Accent" }
+				end
+				New("Frame", CircleProps, {
+					New("UICorner", { CornerRadius = UDim.new(1, 0) }),
+					Library:IconLabel(Config.Icon, IconProps),
+				})
+
+				Dialog.Title.Position = UDim2.fromOffset(68, 18)
+				Dialog.Title.Size = UDim2.new(1, -88, 0, 36)
+				Dialog.Title.TextYAlignment = Enum.TextYAlignment.Center
+				Dialog.Title.TextSize = 20
+			end
+
 			local ContentHolder = New("ScrollingFrame", {
 				BackgroundTransparency = 1,
 				ScrollBarImageTransparency = 0.7,
@@ -6935,8 +7066,8 @@ Components.Window = (function()
 				BottomImage = "rbxassetid://6889812791",
 				MidImage = "rbxassetid://6889812721",
 				TopImage = "rbxassetid://6276641225",
-				Position = UDim2.fromOffset(20, 60),
-				Size = UDim2.new(1, -40, 1, -110),
+				Position = UDim2.fromOffset(20, TopOffset),
+				Size = UDim2.new(1, -40, 1, -(TopOffset + FooterHeight + 4)),
 				CanvasSize = UDim2.fromOffset(0, 0),
 				AutomaticCanvasSize = Enum.AutomaticSize.Y,
 				Parent = Dialog.Root,
@@ -6946,6 +7077,7 @@ Components.Window = (function()
 				FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
 				Text = Config.Content,
 				TextColor3 = Color3.fromRGB(240, 240, 240),
+				TextTransparency = 0.2,
 				TextSize = 14,
 				TextXAlignment = Enum.TextXAlignment.Left,
 				TextYAlignment = Enum.TextYAlignment.Top,
@@ -6958,24 +7090,32 @@ Components.Window = (function()
 			})
 
 			New("UISizeConstraint", {
-				MinSize = Vector2.new(300, 165),
+				MinSize = Vector2.new(300, 170),
 				MaxSize = Vector2.new(620, math.huge),
 				Parent = Dialog.Root,
 			})
 
 			local maxWidth = math.min(620, Window.Size.X.Offset - 120)
 			local baseWidth = math.max(300, math.min(maxWidth, Content.TextBounds.X + 40))
-			Dialog.Root.Size = UDim2.fromOffset(baseWidth, 165)
-			ContentHolder.Size = UDim2.new(1, -40, 1, -110)
+			Dialog.Root.Size = UDim2.fromOffset(baseWidth, 170)
 			task.defer(function()
 				local contentHeight = Content.TextBounds.Y
-				local desired = math.clamp(contentHeight + 110, 165, 420)
+				local desired = math.clamp(contentHeight + TopOffset + FooterHeight + 4, 170, 420)
 				Dialog.Root.Size = UDim2.fromOffset(baseWidth, desired)
 				ContentHolder.CanvasSize = UDim2.fromOffset(0, contentHeight)
 			end)
 
 			for _, Button in next, Config.Buttons do
-				Dialog:Button(Button.Title, Button.Callback)
+				Dialog:Button(Button.Title, Button.Callback, Button.Style)
+			end
+
+			-- tap outside the dialog = cancel (Root is Active, so clicks inside never reach the tint)
+			if Config.DismissOnOutside ~= false then
+				Creator.AddSignal(Dialog.TintFrame.MouseButton1Click, function()
+					pcall(function()
+						Dialog:Close()
+					end)
+				end)
 			end
 
 			Dialog:Open()

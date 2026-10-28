@@ -765,7 +765,7 @@ local Themes = {
 }
 
 local Library = {
-	Version = "1.5.3",
+	Version = "1.5.6",
 
 	OpenFrames = {},
 	Options = {},
@@ -1969,7 +1969,6 @@ do
             "https://clients5.google.com/translate_a/single",
             "https://translate.google.com/translate_a/single",
         }
-        -- Remember the endpoint that worked last time and try it first (saves a failed round trip per request).
         if self.GoodHost and self.GoodHost > 1 then
             local first = table.remove(hosts, self.GoodHost)
             table.insert(hosts, 1, first)
@@ -2079,8 +2078,6 @@ do
             or reason:find("Unexpected", 1, true) ~= nil or reason:find("Empty translation", 1, true) ~= nil
     end
 
-    -- Reserve the next request slot. Safe with several workers: there is no yield between read and write,
-    -- so each worker gets its own slot RequestInterval apart instead of all firing at the same time.
     function LM:Pace()
         local now = os.clock()
         local slot = math.max(now, self.NextSlot or 0)
@@ -2397,9 +2394,6 @@ do
         end)
     end
 
-    -- Build every batch for this round in a single pass. URL length is tracked incrementally
-    -- (URL-encoding is per character, so encoded pieces simply add up) instead of re-encoding
-    -- the whole batch for each added string, which was O(n^2).
     function LM:BuildBatches(sources, language)
         local batches, batch = {}, {}
         local base = #self:URL({}, language)
@@ -2434,7 +2428,6 @@ do
         return batches
     end
 
-    -- Handle the result of one batch. Returns "net" when the whole round should stop (network failure).
     function LM:HandleResult(batch, result, reason, language, epoch, sources)
         if self.Dead or epoch ~= self.Epoch then return end
         self.Failed[language] = self.Failed[language] or {}
@@ -2450,7 +2443,6 @@ do
                     self.Failed[language][item.Source] = os.clock() + self.Config.RetryCooldown
                 end
             end
-            -- Show this batch right away instead of waiting for the whole round.
             self:ApplyAll()
             self:ScheduleSave()
             if missing then self:Retry() else self.FailCount = 0 end
@@ -2476,7 +2468,6 @@ do
         end
     end
 
-    -- Send all batches with several workers in parallel (Config.Concurrency).
     function LM:RunBatches(batches, language, epoch, sources)
         local nextIndex, running, stop = 1, 0, false
         local workers = math.max(1, math.min(self.Config.Concurrency, #batches))
@@ -2507,7 +2498,6 @@ do
             local sources = self:Collect()
             local batches = self:BuildBatches(sources, language)
             if #batches == 0 then
-                -- Everything visible is translated already: tell the user first, verify afterwards.
                 if self.ToastDone ~= language and not self.Pending and not self.Dead then
                     self.ToastStart, self.ToastDone, self.ToastFail = language, language, nil
                     self:Toast("Done", language)

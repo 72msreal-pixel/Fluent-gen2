@@ -8742,8 +8742,6 @@ ElementsTable.Colorpicker = (function()
 			local Dialog = Components.Dialog:Create()
 			local HasAlpha = Config.Transparency ~= nil and Config.Transparency ~= false
 
-			-- ───────── Layout (compact) ─────────
-			-- Bố cục: [Khung màu | HEX,R,G,B xếp dọc] / thanh Hue (/ Alpha) / nút
 			local PAD = 16
 			local INNER = 248
 			local WIDTH = PAD * 2 + INNER
@@ -8772,7 +8770,6 @@ ElementsTable.Colorpicker = (function()
 			Dialog.ButtonHolder.Size = UDim2.new(1, -PAD * 2, 0, 30)
 			Dialog.ButtonHolder.UIListLayout.Padding = UDim.new(0, 8)
 
-			-- ───────── State ─────────
 			local Hue, Sat, Vib = Colorpicker.Hue, Colorpicker.Sat, Colorpicker.Vib
 			local Transparency = Colorpicker.Transparency
 			local OldHue, OldSat, OldVib, OldTransparency = Hue, Sat, Vib, Transparency
@@ -8789,13 +8786,11 @@ ElementsTable.Colorpicker = (function()
 				Connections = {}
 			end
 
-			-- ───────── Helpers ─────────
 			local function GetRGB()
 				local Value = Color3.fromHSV(Hue, Sat, Vib)
 				return math.floor(Value.R * 255 + 0.5), math.floor(Value.G * 255 + 0.5), math.floor(Value.B * 255 + 0.5)
 			end
 
-			-- giữ lại Hue/Sat khi màu là xám/đen (tránh bị nhảy về đỏ)
 			local function SetFromColor(Color)
 				local H, S, V = Color3.toHSV(Color)
 				if V <= 0 then
@@ -8864,7 +8859,6 @@ ElementsTable.Colorpicker = (function()
 				return Hit
 			end
 
-			-- ───────── Old / New chip (bấm vào nửa trái để hoàn tác màu) ─────────
 			local OldHalf = New("TextButton", {
 				Size = UDim2.fromScale(0.5, 1),
 				BackgroundColor3 = OldColor,
@@ -8905,13 +8899,12 @@ ElementsTable.Colorpicker = (function()
 				NewHalf,
 			})
 
-			-- ───────── Saturation / Value map ─────────
 			local SatVibMap = New("ImageLabel", {
 				Size = UDim2.fromOffset(SV_W, SV_H),
 				Position = UDim2.fromOffset(PAD, SV_Y),
 				Image = "rbxassetid://4155801252",
 				BackgroundColor3 = Color3.fromHSV(Hue, 1, 1),
-				BackgroundTransparency = 0, -- FIX: ImageLabel mặc định = 1 nên màu Hue bị ẩn
+				BackgroundTransparency = 0,
 				Active = true,
 				Parent = Dialog.Root,
 			}, {
@@ -8928,7 +8921,6 @@ ElementsTable.Colorpicker = (function()
 			SatHit.AnchorPoint = Vector2.new(0, 0)
 			SatHit.Position = UDim2.fromScale(0, 0)
 
-			-- ───────── Hue bar (mỏng, nằm ngang) ─────────
 			local HueKeys = {}
 			for I = 0, 6 do
 				table.insert(HueKeys, ColorSequenceKeypoint.new(I / 6, Color3.fromHSV(I / 6, 1, 1)))
@@ -8945,7 +8937,6 @@ ElementsTable.Colorpicker = (function()
 			local HueThumb, HueInner = MakeThumb(16, HueBar)
 			local HueHit = MakeHit(HueBar, "Hue", 26)
 
-			-- ───────── Alpha bar ─────────
 			local AlphaBar, AlphaFill, AlphaThumb, AlphaInner, AlphaHit
 			if HasAlpha then
 				AlphaFill = New("Frame", {
@@ -8983,7 +8974,6 @@ ElementsTable.Colorpicker = (function()
 				AlphaHit = MakeHit(AlphaBar, "Alpha", 26)
 			end
 
-			-- ───────── Input fields (HEX / R / G / B / A xếp dọc bên phải khung màu) ─────────
 			local Focused = {}
 			local FieldCount = HasAlpha and 5 or 4
 			local FIELD_H = HasAlpha and 18 or 22
@@ -9067,7 +9057,6 @@ ElementsTable.Colorpicker = (function()
 				AlphaBox, OnAlpha = MakeField(5, "A")
 			end
 
-			-- ───────── Footer buttons ─────────
 			local CancelButton = Dialog:Button("Cancel", Cleanup)
 			local ApplyButton = Dialog:Button("Apply", function()
 				local Result = { Hue, Sat, Vib }
@@ -9082,7 +9071,6 @@ ElementsTable.Colorpicker = (function()
 				end
 			end
 
-			-- nút Apply mang đúng màu đang chọn
 			Creator.OverrideTag(ApplyButton.Frame, {})
 			Creator.OverrideTag(ApplyButton.Title, {})
 			ApplyButton.Title.FontFace = Font.new(FONT, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
@@ -9091,7 +9079,6 @@ ElementsTable.Colorpicker = (function()
 				ApplyStroke.Transparency = 1
 			end
 
-			-- ───────── Render ─────────
 			local function Display()
 				local Color = Color3.fromHSV(Hue, Sat, Vib)
 				local HueColor = Color3.fromHSV(Hue, 1, 1)
@@ -9134,7 +9121,6 @@ ElementsTable.Colorpicker = (function()
 				ApplyButton.Title.TextColor3 = Luma > 0.6 and Color3.fromRGB(20, 20, 20) or Color3.fromRGB(255, 255, 255)
 			end
 
-			-- ───────── Text input handlers ─────────
 			OnHex(function(Text)
 				local Result = ParseHex(Text)
 				if Result then
@@ -9185,7 +9171,6 @@ ElementsTable.Colorpicker = (function()
 				end)
 			)
 
-			-- ───────── Dragging (chuột + cảm ứng) ─────────
 			local function UpdateDrag(Position)
 				if not Dragging then
 					return

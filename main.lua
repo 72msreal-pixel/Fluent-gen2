@@ -8740,128 +8740,215 @@ ElementsTable.Colorpicker = (function()
 
 		local function CreateColorDialog()
 			local Dialog = Components.Dialog:Create()
+			local HasAlpha = Config.Transparency ~= nil and Config.Transparency ~= false
+
+			-- ───────── Layout (compact) ─────────
+			local PAD = 16
+			local INNER = 248
+			local WIDTH = PAD * 2 + INNER
+			local SV_Y, SV_H = 44, 104
+			local HUE_Y = SV_Y + SV_H + 12
+			local ALPHA_Y = HUE_Y + 16
+			local FIELD_Y = (HasAlpha and ALPHA_Y or HUE_Y) + 22
+			local FIELD_H = 26
+			local FOOTER = 52
+			local HEIGHT = FIELD_Y + FIELD_H + 2 + 10 + 12 + FOOTER
+			local CHECKER = "http://www.roblox.com/asset/?id=14204231522"
+			local FONT = "rbxasset://fonts/families/GothamSSm.json"
+
+			Dialog.Root.Size = UDim2.fromOffset(WIDTH, HEIGHT)
+
 			Dialog.Title.Text = Colorpicker.Title
-			Dialog.Root.Size = UDim2.fromOffset(430, 350)
+			Dialog.Title.TextSize = 15
+			Dialog.Title.TextTruncate = Enum.TextTruncate.AtEnd
+			Dialog.Title.Position = UDim2.fromOffset(PAD, 13)
+			Dialog.Title.Size = UDim2.new(1, -(PAD * 2 + 64), 0, 20)
 
-			local Root, HasAlpha = Dialog.Root, not not Config.Transparency
-			local State = { H = Colorpicker.Hue, S = Colorpicker.Sat, V = Colorpicker.Vib, A = Colorpicker.Transparency }
-			local Old = { H = State.H, S = State.S, V = State.V, A = State.A }
-			local UI, Channels = { RGB = {} }, { "R", "G", "B" }
-			local Right, Center = 268, Enum.TextXAlignment.Center
-			local BoldFont = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+			Dialog.ButtonHolderFrame.Size = UDim2.new(1, 0, 0, FOOTER)
+			Dialog.ButtonHolderFrame.Position = UDim2.new(0, 0, 1, -FOOTER)
+			Dialog.ButtonHolder.Size = UDim2.new(1, -PAD * 2, 0, 30)
+			Dialog.ButtonHolder.UIListLayout.Padding = UDim.new(0, 8)
 
-			local function Corner(Radius)
-				return New("UICorner", { CornerRadius = UDim.new(0, Radius) })
+			-- ───────── State ─────────
+			local Hue, Sat, Vib = Colorpicker.Hue, Colorpicker.Sat, Colorpicker.Vib
+			local Transparency = Colorpicker.Transparency
+			local OldHue, OldSat, OldVib, OldTransparency = Hue, Sat, Vib, Transparency
+			local OldColor = Colorpicker.Value
+
+			local Connections = {}
+			local Dragging, DragInput = nil, nil
+
+			local function Cleanup()
+				Dragging, DragInput = nil, nil
+				for _, Connection in ipairs(Connections) do
+					Connection:Disconnect()
+				end
+				Connections = {}
 			end
 
-			local function Contrast(Color)
-				return (Color.R * 0.299 + Color.G * 0.587 + Color.B * 0.114) > 0.6 and Color3.fromRGB(20, 20, 20)
-					or Color3.fromRGB(255, 255, 255)
+			-- ───────── Helpers ─────────
+			local function GetRGB()
+				local Value = Color3.fromHSV(Hue, Sat, Vib)
+				return math.floor(Value.R * 255 + 0.5), math.floor(Value.G * 255 + 0.5), math.floor(Value.B * 255 + 0.5)
 			end
 
-			local function Label(Text, Pos, Width, Align)
-				return New("TextLabel", {
-					FontFace = BoldFont,
-					Text = Text,
-					TextSize = 11,
-					TextXAlignment = Align or Enum.TextXAlignment.Left,
-					Size = UDim2.fromOffset(Width, 14),
-					Position = Pos,
-					BackgroundTransparency = 1,
-					Parent = Root,
-					ThemeTag = { TextColor3 = "SubText" },
-				})
+			-- giữ lại Hue/Sat khi màu là xám/đen (tránh bị nhảy về đỏ)
+			local function SetFromColor(Color)
+				local H, S, V = Color3.toHSV(Color)
+				if V <= 0 then
+					Vib = 0
+				elseif S <= 0 then
+					Sat, Vib = 0, V
+				else
+					Hue, Sat, Vib = H, S, V
+				end
 			end
 
-			local function Box(Pos, Width, Align)
-				local Input = Components.Textbox()
-				Input.Frame.Parent = Root
-				Input.Frame.Position = Pos
-				Input.Frame.Size = UDim2.fromOffset(Width, 30)
-				Input.Input.TextSize = 13
-				Input.Input.ClearTextOnFocus = false
-				Input.Input.TextXAlignment = Align or Enum.TextXAlignment.Left
-				return Input
+			local function ParseHex(Text)
+				Text = Text:gsub("[#%s]", "")
+				if #Text == 3 then
+					Text = Text:gsub(".", "%0%0")
+				end
+				if #Text ~= 6 or Text:find("%X") then
+					return nil
+				end
+				return Color3.fromRGB(
+					tonumber(Text:sub(1, 2), 16),
+					tonumber(Text:sub(3, 4), 16),
+					tonumber(Text:sub(5, 6), 16)
+				)
 			end
 
-			-- checkerboard holder (for transparency preview)
-			local function Checker(Pos, Size, Radius)
-				return New("ImageLabel", {
-					Image = "http://www.roblox.com/asset/?id=14204231522",
-					ImageTransparency = 0.45,
-					ScaleType = Enum.ScaleType.Tile,
-					TileSize = UDim2.fromOffset(40, 40),
-					BackgroundTransparency = 1,
-					Position = Pos,
-					Size = Size,
-					Parent = Root,
+			local function MakeThumb(Size, Parent)
+				local Inner = New("Frame", {
+					Size = UDim2.fromOffset(Size - 6, Size - 6),
+					AnchorPoint = Vector2.new(0.5, 0.5),
+					Position = UDim2.fromScale(0.5, 0.5),
 				}, {
-					Corner(Radius),
-					New("UIStroke", { Thickness = 1, Transparency = 0.55, ThemeTag = { Color = "DialogButtonBorder" } }),
+					New("UICorner", { CornerRadius = UDim.new(1, 0) }),
 				})
-			end
 
-			-- round knob used by the cursor / hue / alpha handles
-			local function Knob(Size, Parent)
-				return New("Frame", {
+				local Ring = New("Frame", {
 					Size = UDim2.fromOffset(Size, Size),
 					AnchorPoint = Vector2.new(0.5, 0.5),
-					Parent = Parent,
+					BackgroundColor3 = Color3.new(1, 1, 1),
 					ZIndex = 5,
+					Parent = Parent,
 				}, {
-					Corner(Size),
-					New("UIStroke", { Color = Color3.fromRGB(255, 255, 255), Thickness = 2.5 }),
+					New("UICorner", { CornerRadius = UDim.new(1, 0) }),
+					New("UIStroke", {
+						ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+						Color = Color3.new(0, 0, 0),
+						Transparency = 0.6,
+						Thickness = 1,
+					}),
+					Inner,
 				})
+
+				return Ring, Inner
 			end
 
-			local function Swatch(Pos, Text)
-				local Fill = New("TextButton", {
-					Text = Text,
-					FontFace = BoldFont,
-					TextSize = 10,
-					TextYAlignment = Enum.TextYAlignment.Bottom,
-					AutoButtonColor = false,
+			local function MakeHit(Bar, Kind, Height)
+				local Hit = New("Frame", {
+					Size = UDim2.new(1, 0, 0, Height),
+					AnchorPoint = Vector2.new(0, 0.5),
+					Position = UDim2.fromScale(0, 0.5),
+					BackgroundTransparency = 1,
+					Active = true,
+					ZIndex = 6,
+					Parent = Bar,
+				})
+				return Hit
+			end
+
+			-- ───────── Old / New chip (bấm vào nửa trái để hoàn tác màu) ─────────
+			local OldHalf = New("TextButton", {
+				Size = UDim2.fromScale(0.5, 1),
+				BackgroundColor3 = OldColor,
+				BackgroundTransparency = Transparency,
+				ZIndex = 2,
+			})
+
+			local NewHalf = New("Frame", {
+				Size = UDim2.fromScale(0.5, 1),
+				Position = UDim2.fromScale(0.5, 0),
+				BackgroundColor3 = OldColor,
+				BackgroundTransparency = Transparency,
+				ZIndex = 2,
+			})
+
+			New("CanvasGroup", {
+				Size = UDim2.fromOffset(56, 20),
+				AnchorPoint = Vector2.new(1, 0),
+				Position = UDim2.new(1, -PAD, 0, 13),
+				BackgroundTransparency = 1,
+				Parent = Dialog.Root,
+			}, {
+				New("UICorner", { CornerRadius = UDim.new(0, 6) }),
+				New("UIStroke", {
+					ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+					Transparency = 0.6,
+					ThemeTag = { Color = "DialogButtonBorder" },
+				}),
+				New("ImageLabel", {
+					Image = CHECKER,
+					ImageTransparency = 0.45,
+					ScaleType = Enum.ScaleType.Tile,
+					TileSize = UDim2.fromOffset(16, 16),
 					Size = UDim2.fromScale(1, 1),
-					Parent = Checker(Pos, UDim2.fromOffset(67, 42), 6),
-				}, {
-					Corner(6),
-					New("UIPadding", { PaddingBottom = UDim.new(0, 4) }),
-				})
-				return Fill
-			end
+					BackgroundTransparency = 1,
+				}),
+				OldHalf,
+				NewHalf,
+			})
 
-			------------------------------------------------ Saturation / Value map
-			UI.Map = New("ImageLabel", {
-				Size = UDim2.fromOffset(204, 150),
-				Position = UDim2.fromOffset(20, 58),
+			-- ───────── Saturation / Value map ─────────
+			local SatVibMap = New("ImageLabel", {
+				Size = UDim2.fromOffset(INNER, SV_H),
+				Position = UDim2.fromOffset(PAD, SV_Y),
 				Image = "rbxassetid://4155801252",
-				Parent = Root,
+				BackgroundColor3 = Color3.fromHSV(Hue, 1, 1),
+				Active = true,
+				Parent = Dialog.Root,
 			}, {
-				Corner(6),
-				New("UIStroke", { Thickness = 1, Transparency = 0.55, ThemeTag = { Color = "DialogBorder" } }),
+				New("UICorner", { CornerRadius = UDim.new(0, 6) }),
+				New("UIStroke", {
+					ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+					Color = Color3.new(0, 0, 0),
+					Transparency = 0.75,
+				}),
 			})
-			UI.Cursor = Knob(18, UI.Map)
+			local SatThumb, SatInner = MakeThumb(18, SatVibMap)
+			local SatHit = MakeHit(SatVibMap, "SV", 0)
+			SatHit.Size = UDim2.fromScale(1, 1)
+			SatHit.AnchorPoint = Vector2.new(0, 0)
+			SatHit.Position = UDim2.fromScale(0, 0)
 
-			------------------------------------------------ Hue slider
-			local HueStops = {}
+			-- ───────── Hue bar (mỏng, nằm ngang) ─────────
+			local HueKeys = {}
 			for I = 0, 6 do
-				table.insert(HueStops, ColorSequenceKeypoint.new(I / 6, Color3.fromHSV(I / 6, 1, 1)))
+				table.insert(HueKeys, ColorSequenceKeypoint.new(I / 6, Color3.fromHSV(I / 6, 1, 1)))
 			end
-			UI.Hue = New("Frame", {
-				Size = UDim2.fromOffset(14, 150),
-				Position = UDim2.fromOffset(234, 58),
-				Parent = Root,
-			}, {
-				Corner(7),
-				New("UIGradient", { Color = ColorSequence.new(HueStops), Rotation = 90 }),
-			})
-			UI.HueKnob = Knob(18, UI.Hue)
 
-			------------------------------------------------ Alpha slider (optional)
+			local HueBar = New("Frame", {
+				Size = UDim2.fromOffset(INNER, 8),
+				Position = UDim2.fromOffset(PAD, HUE_Y),
+				Parent = Dialog.Root,
+			}, {
+				New("UICorner", { CornerRadius = UDim.new(1, 0) }),
+				New("UIGradient", { Color = ColorSequence.new(HueKeys) }),
+			})
+			local HueThumb, HueInner = MakeThumb(16, HueBar)
+			local HueHit = MakeHit(HueBar, "Hue", 26)
+
+			-- ───────── Alpha bar ─────────
+			local AlphaBar, AlphaFill, AlphaThumb, AlphaInner, AlphaHit
 			if HasAlpha then
-				UI.AlphaBar = Checker(UDim2.fromOffset(20, 222), UDim2.fromOffset(228, 14), 7)
-				UI.AlphaFill = New("Frame", { Size = UDim2.fromScale(1, 1), Parent = UI.AlphaBar }, {
-					Corner(7),
+				AlphaFill = New("Frame", {
+					Size = UDim2.fromScale(1, 1),
+					BackgroundColor3 = Color3.fromHSV(Hue, Sat, Vib),
+				}, {
+					New("UICorner", { CornerRadius = UDim.new(1, 0) }),
 					New("UIGradient", {
 						Transparency = NumberSequence.new({
 							NumberSequenceKeypoint.new(0, 1),
@@ -8869,190 +8956,300 @@ ElementsTable.Colorpicker = (function()
 						}),
 					}),
 				})
-				UI.AlphaKnob = Knob(18, UI.AlphaBar)
+
+				AlphaBar = New("Frame", {
+					Size = UDim2.fromOffset(INNER, 8),
+					Position = UDim2.fromOffset(PAD, ALPHA_Y),
+					BackgroundTransparency = 1,
+					Parent = Dialog.Root,
+				}, {
+					New("ImageLabel", {
+						Image = CHECKER,
+						ImageTransparency = 0.45,
+						ScaleType = Enum.ScaleType.Tile,
+						TileSize = UDim2.fromOffset(16, 16),
+						Size = UDim2.fromScale(1, 1),
+						BackgroundTransparency = 1,
+					}, {
+						New("UICorner", { CornerRadius = UDim.new(1, 0) }),
+					}),
+					AlphaFill,
+				})
+				AlphaThumb, AlphaInner = MakeThumb(16, AlphaBar)
+				AlphaHit = MakeHit(AlphaBar, "Alpha", 26)
 			end
 
-			------------------------------------------------ Quick presets
-			local Presets = New("Frame", {
-				Size = UDim2.fromOffset(228, 24),
-				Position = UDim2.fromOffset(20, HasAlpha and 248 or 224),
-				BackgroundTransparency = 1,
-				Parent = Root,
-			}, {
-				New("UIListLayout", {
-					FillDirection = Enum.FillDirection.Horizontal,
-					Padding = UDim.new(0, 5),
-					SortOrder = Enum.SortOrder.LayoutOrder,
-				}),
-			})
+			-- ───────── Input fields (Hex | R | G | B | A) ─────────
+			local Focused = {}
 
-			------------------------------------------------ Right column
-			UI.New = Swatch(UDim2.fromOffset(Right, 58), "NEW")
-			UI.Old = Swatch(UDim2.fromOffset(Right + 75, 58), "OLD")
-			UI.Old.BackgroundColor3 = Colorpicker.Value
-			UI.Old.BackgroundTransparency = Old.A
-			UI.Old.TextColor3 = Contrast(Colorpicker.Value)
+			local function MakeField(X, Width, Caption)
+				local Stroke = New("UIStroke", {
+					ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+					Transparency = 0.65,
+					ThemeTag = { Color = "DialogButtonBorder" },
+				})
 
-			Label("HEX", UDim2.fromOffset(Right, 110), 142)
-			UI.Hex = Box(UDim2.fromOffset(Right, 124), 142)
+				local Box = New("TextBox", {
+					FontFace = Font.new(FONT, Enum.FontWeight.Medium, Enum.FontStyle.Normal),
+					Text = "",
+					TextSize = 12,
+					TextXAlignment = Enum.TextXAlignment.Center,
+					ClearTextOnFocus = false,
+					ClipsDescendants = true,
+					BackgroundTransparency = 1,
+					Size = UDim2.fromScale(1, 1),
+					ThemeTag = { TextColor3 = "Text" },
+				})
 
-			for I, Name in ipairs(Channels) do
-				local X = Right + (I - 1) * 50
-				Label(Name, UDim2.fromOffset(X, 162), 42, Center)
-				UI.RGB[I] = Box(UDim2.fromOffset(X, 176), 42, Center)
-			end
+				New("Frame", {
+					Size = UDim2.fromOffset(Width, FIELD_H),
+					Position = UDim2.fromOffset(X, FIELD_Y),
+					Parent = Dialog.Root,
+					ThemeTag = { BackgroundColor3 = "DialogInput" },
+				}, {
+					New("UICorner", { CornerRadius = UDim.new(0, 6) }),
+					Stroke,
+					Box,
+				})
 
-			if HasAlpha then
-				Label("ALPHA", UDim2.fromOffset(Right, 214), 142)
-				UI.Alpha = Box(UDim2.fromOffset(Right, 228), 142)
-			end
+				New("TextLabel", {
+					FontFace = Font.new(FONT, Enum.FontWeight.Medium, Enum.FontStyle.Normal),
+					Text = Caption,
+					TextSize = 10,
+					Size = UDim2.fromOffset(Width, 10),
+					Position = UDim2.fromOffset(X, FIELD_Y + FIELD_H + 3),
+					BackgroundTransparency = 1,
+					Parent = Dialog.Root,
+					ThemeTag = { TextColor3 = "SubText" },
+				})
 
-			------------------------------------------------ Logic
-			local function Current()
-				return Color3.fromHSV(State.H, State.S, State.V)
-			end
+				table.insert(
+					Connections,
+					Box.Focused:Connect(function()
+						Focused[Box] = true
+						Stroke.Color = Creator.GetThemeProperty("Accent")
+						Stroke.Transparency = 0
+					end)
+				)
 
-			local function Display()
-				local Color, Pure = Current(), Color3.fromHSV(State.H, 1, 1)
-
-				UI.Map.BackgroundColor3 = Pure
-				UI.Cursor.Position = UDim2.fromScale(State.S, 1 - State.V)
-				UI.Cursor.BackgroundColor3 = Color
-				UI.HueKnob.Position = UDim2.fromScale(0.5, State.H)
-				UI.HueKnob.BackgroundColor3 = Pure
-				UI.New.BackgroundColor3 = Color
-				UI.New.BackgroundTransparency = State.A
-				UI.New.TextColor3 = Contrast(Color)
-
-				UI.Hex.Input.Text = "#" .. Color:ToHex():upper()
-				for I, Name in ipairs(Channels) do
-					UI.RGB[I].Input.Text = tostring(math.round(Color[Name] * 255))
+				return Box, function(Callback)
+					table.insert(
+						Connections,
+						Box.FocusLost:Connect(function()
+							Focused[Box] = nil
+							Stroke.Color = Creator.GetThemeProperty("DialogButtonBorder")
+							Stroke.Transparency = 0.65
+							Callback(Box.Text)
+						end)
+					)
 				end
+			end
+
+			local GAP = 6
+			local ChannelCount = HasAlpha and 4 or 3
+			local BoxWidth = HasAlpha and 36 or 46
+			local HexWidth = INNER - ChannelCount * (BoxWidth + GAP)
+
+			local HexBox, OnHex = MakeField(PAD, HexWidth, "HEX")
+			local RedBox, OnRed = MakeField(PAD + HexWidth + GAP, BoxWidth, "R")
+			local GreenBox, OnGreen = MakeField(PAD + HexWidth + GAP + (BoxWidth + GAP), BoxWidth, "G")
+			local BlueBox, OnBlue = MakeField(PAD + HexWidth + GAP + (BoxWidth + GAP) * 2, BoxWidth, "B")
+			local AlphaBox, OnAlpha
+			if HasAlpha then
+				AlphaBox, OnAlpha = MakeField(PAD + HexWidth + GAP + (BoxWidth + GAP) * 3, BoxWidth, "A %")
+			end
+
+			-- ───────── Footer buttons ─────────
+			local CancelButton = Dialog:Button("Cancel", Cleanup)
+			local ApplyButton = Dialog:Button("Apply", function()
+				local Result = { Hue, Sat, Vib }
+				local ResultTransparency = Transparency
+				Cleanup()
+				Colorpicker:SetValue(Result, ResultTransparency)
+			end)
+
+			for _, Child in next, Dialog.ButtonHolder:GetChildren() do
+				if Child:IsA("TextButton") then
+					Child.Size = UDim2.new(Child.Size.X.Scale, Child.Size.X.Offset, 0, 30)
+				end
+			end
+
+			-- nút Apply mang đúng màu đang chọn
+			Creator.OverrideTag(ApplyButton.Frame, {})
+			Creator.OverrideTag(ApplyButton.Title, {})
+			ApplyButton.Title.FontFace = Font.new(FONT, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+			local ApplyStroke = ApplyButton.Frame:FindFirstChildOfClass("UIStroke")
+			if ApplyStroke then
+				ApplyStroke.Transparency = 1
+			end
+
+			-- ───────── Render ─────────
+			local function Display()
+				local Color = Color3.fromHSV(Hue, Sat, Vib)
+				local HueColor = Color3.fromHSV(Hue, 1, 1)
+				local R, G, B = GetRGB()
+
+				SatVibMap.BackgroundColor3 = HueColor
+				SatThumb.Position = UDim2.fromScale(Sat, 1 - Vib)
+				SatInner.BackgroundColor3 = Color
+
+				HueThumb.Position = UDim2.fromScale(Hue, 0.5)
+				HueInner.BackgroundColor3 = HueColor
+
+				NewHalf.BackgroundColor3 = Color
+				NewHalf.BackgroundTransparency = HasAlpha and Transparency or 0
 
 				if HasAlpha then
-					UI.AlphaFill.BackgroundColor3 = Color
-					UI.AlphaKnob.Position = UDim2.fromScale(1 - State.A, 0.5)
-					UI.AlphaKnob.BackgroundColor3 = Color
-					UI.Alpha.Input.Text = math.round((1 - State.A) * 100) .. "%"
+					AlphaFill.BackgroundColor3 = Color
+					AlphaThumb.Position = UDim2.fromScale(1 - Transparency, 0.5)
+					AlphaInner.BackgroundColor3 = Color
 				end
+
+				if not Focused[HexBox] then
+					HexBox.Text = "#" .. string.upper(Color:ToHex())
+				end
+				if not Focused[RedBox] then
+					RedBox.Text = tostring(R)
+				end
+				if not Focused[GreenBox] then
+					GreenBox.Text = tostring(G)
+				end
+				if not Focused[BlueBox] then
+					BlueBox.Text = tostring(B)
+				end
+				if HasAlpha and not Focused[AlphaBox] then
+					AlphaBox.Text = tostring(math.floor((1 - Transparency) * 100 + 0.5))
+				end
+
+				ApplyButton.Frame.BackgroundColor3 = Color
+				local Luma = 0.299 * Color.R + 0.587 * Color.G + 0.114 * Color.B
+				ApplyButton.Title.TextColor3 = Luma > 0.6 and Color3.fromRGB(20, 20, 20) or Color3.fromRGB(255, 255, 255)
 			end
 
-			local function SetColor(Color)
-				State.H, State.S, State.V = Color3.toHSV(Color)
-				Display()
-			end
-
-			-- drag works for both mouse and touch
-			local function Drag(Object, Callback)
-				Creator.AddSignal(Object.InputBegan, function(Input)
-					local Type = Input.UserInputType
-					if Type ~= Enum.UserInputType.MouseButton1 and Type ~= Enum.UserInputType.Touch then
-						return
-					end
-
-					local function Update(Pos)
-						local P, Z = Object.AbsolutePosition, Object.AbsoluteSize
-						Callback(math.clamp((Pos.X - P.X) / Z.X, 0, 1), math.clamp((Pos.Y - P.Y) / Z.Y, 0, 1))
-						Display()
-					end
-
-					Update(Input.Position)
-
-					local MoveConn, EndConn
-					MoveConn = UserInputService.InputChanged:Connect(function(Changed)
-						if Changed == Input or Changed.UserInputType == Enum.UserInputType.MouseMovement then
-							Update(Changed.Position)
-						end
-					end)
-					EndConn = Input.Changed:Connect(function()
-						if Input.UserInputState == Enum.UserInputState.End then
-							MoveConn:Disconnect()
-							EndConn:Disconnect()
-						end
-					end)
-				end)
-			end
-
-			Drag(UI.Map, function(X, Y)
-				State.S, State.V = X, 1 - Y
-			end)
-			Drag(UI.Hue, function(_, Y)
-				State.H = Y
-			end)
-			if HasAlpha then
-				Drag(UI.AlphaBar, function(X)
-					State.A = 1 - X
-				end)
-			end
-
-			for _, Hex in ipairs({ "FF4D4D", "FF9F43", "FECA57", "1DD1A1", "48DBFB", "5F7CFF", "A55EEA", "FFFFFF" }) do
-				local Button = New("TextButton", {
-					Text = "",
-					AutoButtonColor = false,
-					Size = UDim2.fromOffset(24, 24),
-					BackgroundColor3 = Color3.fromHex(Hex),
-					Parent = Presets,
-				}, {
-					Corner(12),
-					New("UIStroke", { Thickness = 1, Transparency = 0.55, ThemeTag = { Color = "DialogButtonBorder" } }),
-				})
-				Creator.AddSignal(Button.MouseButton1Click, function()
-					SetColor(Color3.fromHex(Hex))
-				end)
-			end
-
-			Creator.AddSignal(UI.Old.MouseButton1Click, function()
-				State.H, State.S, State.V, State.A = Old.H, Old.S, Old.V, Old.A
+			-- ───────── Text input handlers ─────────
+			OnHex(function(Text)
+				local Result = ParseHex(Text)
+				if Result then
+					SetFromColor(Result)
+				end
 				Display()
 			end)
 
-			Creator.AddSignal(UI.Hex.Input.FocusLost, function()
-				local Success, Result = pcall(Color3.fromHex, UI.Hex.Input.Text)
-				if Success and typeof(Result) == "Color3" then
-					SetColor(Result)
-				else
-					Display()
-				end
-			end)
-
-			for I, Input in ipairs(UI.RGB) do
-				Creator.AddSignal(Input.Input.FocusLost, function()
-					local Number = tonumber(Input.Input.Text)
-					if Number then
-						local Color = Current()
-						local Values = { Color.R, Color.G, Color.B }
-						Values[I] = math.clamp(Number, 0, 255) / 255
-						SetColor(Color3.new(table.unpack(Values)))
-					else
-						Display()
-					end
-				end)
-			end
-
-			if HasAlpha then
-				Creator.AddSignal(UI.Alpha.Input.FocusLost, function()
-					local Number = tonumber((UI.Alpha.Input.Text:gsub("%%", "")))
-					if Number then
-						State.A = 1 - math.clamp(Number, 0, 100) / 100
+			local function OnChannel(Register, Index)
+				Register(function(Text)
+					local Value = tonumber((Text:gsub("[^%d%.]", "")))
+					if Value then
+						Value = math.clamp(math.floor(Value + 0.5), 0, 255)
+						local R, G, B = GetRGB()
+						if Index == 1 then
+							R = Value
+						elseif Index == 2 then
+							G = Value
+						else
+							B = Value
+						end
+						SetFromColor(Color3.fromRGB(R, G, B))
 					end
 					Display()
 				end)
 			end
+
+			OnChannel(OnRed, 1)
+			OnChannel(OnGreen, 2)
+			OnChannel(OnBlue, 3)
+
+			if HasAlpha then
+				OnAlpha(function(Text)
+					local Value = tonumber((Text:gsub("[^%d%.]", "")))
+					if Value then
+						Transparency = 1 - math.clamp(Value, 0, 100) / 100
+					end
+					Display()
+				end)
+			end
+
+			table.insert(
+				Connections,
+				OldHalf.MouseButton1Click:Connect(function()
+					Hue, Sat, Vib = OldHue, OldSat, OldVib
+					Transparency = OldTransparency
+					Display()
+				end)
+			)
+
+			-- ───────── Dragging (chuột + cảm ứng) ─────────
+			local function UpdateDrag(Position)
+				if not Dragging then
+					return
+				end
+
+				if Dragging == "SV" then
+					local AP, AS = SatVibMap.AbsolutePosition, SatVibMap.AbsoluteSize
+					Sat = math.clamp((Position.X - AP.X) / AS.X, 0, 1)
+					Vib = 1 - math.clamp((Position.Y - AP.Y) / AS.Y, 0, 1)
+				elseif Dragging == "Hue" then
+					local AP, AS = HueBar.AbsolutePosition, HueBar.AbsoluteSize
+					Hue = math.clamp((Position.X - AP.X) / AS.X, 0, 1)
+				elseif Dragging == "Alpha" then
+					local AP, AS = AlphaBar.AbsolutePosition, AlphaBar.AbsoluteSize
+					Transparency = 1 - math.clamp((Position.X - AP.X) / AS.X, 0, 1)
+				end
+
+				Display()
+			end
+
+			local function BindDrag(Object, Kind)
+				table.insert(
+					Connections,
+					Object.InputBegan:Connect(function(Input)
+						if
+							Input.UserInputType == Enum.UserInputType.MouseButton1
+							or Input.UserInputType == Enum.UserInputType.Touch
+						then
+							Dragging, DragInput = Kind, Input
+							UpdateDrag(Input.Position)
+						end
+					end)
+				)
+			end
+
+			BindDrag(SatHit, "SV")
+			BindDrag(HueHit, "Hue")
+			if HasAlpha then
+				BindDrag(AlphaHit, "Alpha")
+			end
+
+			table.insert(
+				Connections,
+				UserInputService.InputChanged:Connect(function(Input)
+					if
+						Dragging
+						and (Input.UserInputType == Enum.UserInputType.MouseMovement or Input == DragInput)
+					then
+						UpdateDrag(Input.Position)
+					end
+				end)
+			)
+
+			table.insert(
+				Connections,
+				UserInputService.InputEnded:Connect(function(Input)
+					if
+						DragInput
+						and (
+							Input == DragInput
+							or (
+								DragInput.UserInputType == Enum.UserInputType.MouseButton1
+								and Input.UserInputType == Enum.UserInputType.MouseButton1
+							)
+						)
+					then
+						Dragging, DragInput = nil, nil
+					end
+				end)
+			)
 
 			Display()
-
-			local Done = Dialog:Button("Done", function()
-				Colorpicker:SetValue({ State.H, State.S, State.V }, State.A)
-			end)
-			Dialog:Button("Cancel")
-
-			-- highlight the Done button with the theme accent
-			local DoneStroke = Done.Frame:FindFirstChildOfClass("UIStroke")
-			if DoneStroke then
-				DoneStroke.Color = Creator.GetThemeProperty("Accent")
-				DoneStroke.Transparency = 0.2
-			end
-
 			Dialog:Open()
 		end
 

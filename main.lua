@@ -1681,8 +1681,39 @@ do
         SaveScheduled = false, Epoch = 0, LastRequest = -math.huge,
         CurrentLanguage = "en", LastError = nil,
         Marks = {}, Bad = {}, Reverse = {},
+        DisplayLanguage = "en", Held = false, HoldToken = 0,
+        Committing = false, CommitAgain = false, CommitQueued = false,
+        SaveDirtyAt = 0, Saving = false,
     }
     Library._LanguageManager = LM
+
+    local function newSlicer(budget)
+        local started = os.clock()
+        return function(minUsed)
+            if os.clock() - started >= (minUsed or budget) then
+                task.wait()
+                started = os.clock()
+                return true
+            end
+            return false
+        end
+    end
+
+    local function isShown(node, memo)
+        if node == nil then return false end
+        local known = memo[node]
+        if known ~= nil then return known end
+        local shown = true
+        if node:IsA("GuiObject") then shown = node.Visible
+        elseif node:IsA("LayerCollector") then shown = node.Enabled end
+        if shown then
+            local parent = node.Parent
+            if parent == nil then shown = false
+            elseif parent ~= game then shown = isShown(parent, memo) end
+        end
+        memo[node] = shown
+        return shown
+    end
 
     function LM:Code(code)
         if type(code) ~= "string" then return nil end
@@ -1799,32 +1830,36 @@ do
         return not (failed and failed[source] and failed[source] > os.clock())
     end
 
-    function LM:Apply(record)
-        if self.Dead then return end
+    function LM:Resolve(record, language)
         local value, found, anyFound = record.Source, true, false
         local translating = self.Active and not self:Ignored(record)
         if translating then
             if record.Parts then
                 local values = {}
                 for index, source in ipairs(record.Parts) do
-                    local translated, resolved = self:Lookup(source, self.CurrentLanguage)
+                    local translated, resolved = self:Lookup(source, language)
                     values[index] = translated
                     found = found and resolved
                     anyFound = anyFound or resolved
                 end
                 value = table.concat(values, record.Separator)
             else
-                value, found = self:Lookup(record.Source, self.CurrentLanguage)
+                value, found = self:Lookup(record.Source, language)
                 anyFound = found
             end
         end
         value = self:Format(record, value)
+        local tag = "source"
+        if translating then
+            tag = found and language or (anyFound and "mixed" or self.Config.SourceLanguage)
+        end
+        return value, found, tag, translating
+    end
+
+    function LM:Write(record, value, found, tag, translating)
         record.Expected = value
         record.Resolved = found
-        record.Language = "source"
-        if translating then
-            record.Language = found and self.CurrentLanguage or (anyFound and "mixed" or self.Config.SourceLanguage)
-        end
+        record.Language = tag
         if translating and value ~= record.Source then
             record.Produced = record.Produced or {}
             record.Produced[value] = true
@@ -1833,16 +1868,111 @@ do
         if record.Object[record.Property] ~= value then record.Object[record.Property] = value end
     end
 
+    function LM:Apply(record)
+        if self.Dead then return end
+        record.Pending = nil
+        local value, found, tag, translating = self:Resolve(record, self.DisplayLanguage)
+        self:Write(record, value, found, tag, translating)
+    end
+
+    function LM:Flush(record)
+        if not record.Pending then return end
+        record.Pending = nil
+        local records = self.Records[record.Object]
+        if records and records[record.Property] == record then
+            self:Write(record, record.PV, record.PF, record.PT, record.PR)
+        end
+    end
+
     function LM:Remember(value, source)
         local old = self.Reverse[value]
         if old == nil then self.Reverse[value] = source
         elseif old ~= source then self.Reverse[value] = false end
     end
 
-    function LM:ApplyAll()
+    function LM:CommitPass()
+        local language = self.DisplayLanguage
+        local config = self.Config
+        local slice = newSlicer(config and config.FrameBudget or 0.003)
+        local function stale() return self.Dead or self.DisplayLanguage ~= language end
+
+        local list = {}
         for _, properties in pairs(self.Records) do
-            for _, record in pairs(properties) do self:Apply(record) end
+            for _, record in pairs(properties) do list[#list + 1] = record end
         end
+
+        local memo, shown, hidden = {}, {}, {}
+        for index = 1, #list do
+            local record = list[index]
+            if isShown(record.Object, memo) then shown[#shown + 1] = record else hidden[#hidden + 1] = record end
+            if slice() and stale() then return end
+        end
+
+        for index = 1, #shown do
+            local record = shown[index]
+            record.PV, record.PF, record.PT, record.PR = self:Resolve(record, language)
+            record.Pending = true
+            if slice() and stale() then return end
+        end
+
+        if slice(0.0015) and stale() then return end
+        local sync = newSlicer(config and config.SyncBudget or 0.006)
+        for index = 1, #shown do
+            self:Flush(shown[index])
+            if sync() and stale() then return end
+        end
+
+        for index = 1, #hidden do
+            local record = hidden[index]
+            local records = self.Records[record.Object]
+            if records and records[record.Property] == record then self:Apply(record) end
+            if slice() and stale() then return end
+        end
+    end
+
+    function LM:Commit()
+        if self.Dead then return end
+        if self.Committing then self.CommitAgain = true; return end
+        self.Committing = true
+        task.spawn(function()
+            local ok, err = pcall(function()
+                repeat
+                    self.CommitAgain = false
+                    self:CommitPass()
+                until not self.CommitAgain or self.Dead
+            end)
+            self.Committing = false
+            if not ok then self:Error(err) end
+        end)
+    end
+
+    function LM:CommitSoon()
+        if self.CommitQueued or self.Dead then return end
+        self.CommitQueued = true
+        task.delay(0.1, function()
+            self.CommitQueued = false
+            self:Commit()
+        end)
+    end
+
+    function LM:ApplyAll() self:Commit() end
+
+    function LM:ReleaseHold()
+        if not self.Held then return end
+        self.Held = false
+        self.HoldToken = self.HoldToken + 1
+        self.DisplayLanguage = self.CurrentLanguage
+        self:Commit()
+    end
+
+    function LM:Hold()
+        self.Held = true
+        self.HoldToken = self.HoldToken + 1
+        local token = self.HoldToken
+        task.delay(self.Config.SwapTimeout, function()
+            if self.HoldToken == token and self.Held then self:ReleaseHold() end
+        end)
+        self:Schedule(0)
     end
 
     function LM:Untrack(object)
@@ -1902,19 +2032,27 @@ do
         self:Schedule()
     end
 
-    function LM:Collect()
-        local result, seen = {}, {}
+    function LM:Collect(slice)
+        local records = {}
         for _, properties in pairs(self.Records) do
-            for _, record in pairs(properties) do
-                if not self:Ignored(record) then
-                    for _, source in ipairs(record.Parts or {record.Source}) do
-                        if not seen[source] then
-                            seen[source] = true
-                            table.insert(result, source)
-                        end
-                    end
+            for _, record in pairs(properties) do records[#records + 1] = record end
+        end
+        local result, seen = {}, {}
+        local function add(source)
+            if not seen[source] then
+                seen[source] = true
+                result[#result + 1] = source
+            end
+        end
+        for _, record in ipairs(records) do
+            if not self:Ignored(record) then
+                if record.Parts then
+                    for _, source in ipairs(record.Parts) do add(source) end
+                else
+                    add(record.Source)
                 end
             end
+            if slice then slice() end
         end
         table.sort(result)
         return result, seen
@@ -1971,9 +2109,12 @@ do
         return self:Code(data.SelectedLanguage)
     end
 
-    function LM:SaveCache()
+    function LM:SaveCache(sliced)
         if not self.Active or not self.Config.Cache or type(writefile) ~= "function" then return false end
+        if self.Saving then return false end
+        local step = sliced and newSlicer(self.Config.FrameBudget) or function() return false end
         if self.Config.AutoPruneCache then self:PruneCache() end
+        self.Saving = true
         local ok, err = pcall(function()
             local folder = self.Config.CacheFile:match("^(.*)/[^/]+$")
             if folder and type(makefolder) == "function" then
@@ -1986,42 +2127,63 @@ do
                     end
                 end
             end
-            local blocks = {}
-            for code, dict in pairs(self.Cache) do
+            local _, live = self:Collect(sliced and step or nil)
+            local names, codes = {}, {}
+            for code in pairs(self.Cache) do codes[code] = true end
+            for code in pairs(self.Bad) do codes[code] = true end
+            codes[self.Config.SourceLanguage] = nil
+            for code in pairs(codes) do table.insert(names, code) end
+            table.sort(names)
+            local parts = {}
+            for _, code in ipairs(names) do
                 local block = {}
-                for source, value in pairs(dict) do
-                    block[source] = {t = value, m = (self.Marks[code] and self.Marks[code][source]) or "new"}
+                local dict = self.Cache[code]
+                if dict then
+                    local marks = self.Marks[code]
+                    for source, value in pairs(dict) do
+                        block[source] = {t = value, m = (marks and marks[source]) or "new"}
+                    end
                 end
-                blocks[code] = block
-            end
-            for code, dict in pairs(self.Bad) do
-                blocks[code] = blocks[code] or {}
-                for source, value in pairs(dict) do
-                    if not blocks[code][source] then blocks[code][source] = {t = value, m = "bad"} end
+                local bad = self.Bad[code]
+                if bad then
+                    for source, value in pairs(bad) do
+                        if not block[source] then block[source] = {t = value, m = "bad"} end
+                    end
                 end
+                parts[#parts + 1] = '"' .. code .. '":' .. httpService:JSONEncode(block)
+                step()
             end
-            local _, live = self:Collect()
             local base = {}
             for source in pairs(live) do base[source] = {t = source, m = "source"} end
-            blocks[self.Config.SourceLanguage] = base
-            writefile(self.Config.CacheFile, httpService:JSONEncode({
+            parts[#parts + 1] = '"' .. self.Config.SourceLanguage .. '":' .. httpService:JSONEncode(base)
+            local head = httpService:JSONEncode({
                 Version = 2, SourceLanguage = self.Config.SourceLanguage,
                 NoTranslateKey = self:NoTranslateKey(),
                 SelectedLanguage = self.Config.SaveSelection and self.CurrentLanguage or nil,
-                Translations = blocks,
-            }))
+            })
+            writefile(self.Config.CacheFile, head:sub(1, -2) .. ',"Translations":{' .. table.concat(parts, ",") .. "}}")
         end)
+        self.Saving = false
         if not ok then self:Error("Cannot save cache: " .. tostring(err)) end
         return ok
     end
 
     function LM:ScheduleSave()
-        if not self.Active or self.SaveScheduled or self.Dead then return end
+        if not self.Active or self.Dead then return end
+        self.SaveDirtyAt = os.clock()
+        if self.SaveScheduled then return end
         self.SaveScheduled = true
-        task.delay(1, function()
+        local function attempt()
+            if self.Dead then self.SaveScheduled = false; return end
+            local quiet = os.clock() - self.SaveDirtyAt >= self.Config.SaveDelay
+            if self.Held or self.Committing or not quiet then
+                task.delay(0.5, attempt)
+                return
+            end
             self.SaveScheduled = false
-            if not self.Dead then self:SaveCache() end
-        end)
+            self:SaveCache(true)
+        end
+        task.delay(self.Config.SaveDelay, attempt)
     end
 
     function LM:HTTP(url)
@@ -2046,20 +2208,28 @@ do
         for _, host in ipairs(hosts) do
             local target = host .. "?" .. query
             if host:find("clients5", 1, true) then target = target:gsub("client=gtx", "client=dict-chrome-ex") end
-            local okGet, body = pcall(function() return game:HttpGet(target) end)
-            if okGet and type(body) == "string" and body:sub(1, 1) == "[" then
-                self.GoodHost = hostIndex[host:match("//([^/]+)") or ""] or self.GoodHost
-                return body
-            end
-            table.insert(problems, (host:match("//([^/]+)") or host) .. " HttpGet: " .. (okGet and "bad body" or tostring(body):sub(1, 60)))
-            if type(sender) == "function" then
+            local name = host:match("//([^/]+)") or host
+            local function viaRequest()
                 local okReq, res = pcall(sender, {Url = target, Method = "GET", Timeout = 15})
                 local status = okReq and type(res) == "table" and tonumber(res.StatusCode or res.Status) or 0
                 if okReq and type(res) == "table" and status >= 200 and status < 300 and type(res.Body) == "string" and res.Body:sub(1, 1) == "[" then
-                    self.GoodHost = hostIndex[host:match("//([^/]+)") or ""] or self.GoodHost
                     return res.Body
                 end
-                table.insert(problems, (host:match("//([^/]+)") or host) .. " request: " .. (okReq and ("HTTP " .. status) or tostring(res):sub(1, 60)))
+                return nil, name .. " request: " .. (okReq and ("HTTP " .. status) or tostring(res):sub(1, 60))
+            end
+            local function viaHttpGet()
+                local okGet, body = pcall(function() return game:HttpGet(target) end)
+                if okGet and type(body) == "string" and body:sub(1, 1) == "[" then return body end
+                return nil, name .. " HttpGet: " .. (okGet and "bad body" or tostring(body):sub(1, 60))
+            end
+            local attempts = type(sender) == "function" and {viaRequest, viaHttpGet} or {viaHttpGet}
+            for _, attempt in ipairs(attempts) do
+                local body, problem = attempt()
+                if body then
+                    self.GoodHost = hostIndex[name] or self.GoodHost
+                    return body
+                end
+                table.insert(problems, problem)
             end
         end
         if not sender and RunService:IsClient() and #problems == 0 then
@@ -2205,8 +2375,33 @@ do
         return nil, tostring(result)
     end
 
+    function LM:SendSegments(item, language, epoch)
+        for _, tag in ipairs(item.Tags) do
+            if tag:sub(1, 1) == "<" then return nil, "Protected tags; source retained" end
+        end
+        local text, pieces, position, translatedAny = item.Text, {}, 1, false
+        while true do
+            local first, last = text:find("ZXQT%d+QXZ", position)
+            local chunk = text:sub(position, (first or (#text + 1)) - 1)
+            local core = chunk:match("^%s*(.-)%s*$")
+            if core ~= "" and core:match("[%a\128-\255]") then
+                local value, why = self:Plain(core, self.Config.SourceLanguage, language, epoch, language)
+                if not value then return nil, why end
+                chunk = (chunk:match("^%s*") or "") .. value .. (chunk:match("%s*$") or "")
+                translatedAny = true
+            end
+            pieces[#pieces + 1] = chunk
+            if not first then break end
+            pieces[#pieces + 1] = text:sub(first, last)
+            position = last + 1
+        end
+        local restored = translatedAny and self:Restore(table.concat(pieces), item.Tags) or nil
+        if not restored then return nil, "Protected tags; source retained" end
+        return (item.Source:match("^%s*") or "") .. restored .. (item.Source:match("%s*$") or "")
+    end
+
     function LM:SendPlain(item, language, epoch)
-        if #item.Tags > 0 then return nil, "Protected tags; source retained" end
+        if #item.Tags > 0 then return self:SendSegments(item, language, epoch) end
         local value, why = self:Plain(item.Text, self.Config.SourceLanguage, language, epoch, language)
         if not value then return nil, why end
         return (item.Source:match("^%s*") or "") .. value .. (item.Source:match("%s*$") or "")
@@ -2349,7 +2544,12 @@ do
         self.Marks[language] = self.Marks[language] or {}
         local marks, manual = self.Marks[language], self.Config.Translations[language]
         local budget, changed, skipped = 8, false, false
-        for _, source in ipairs(self:Collect()) do
+        local slice = newSlicer(self.Config.FrameBudget)
+        for _, source in ipairs(self:Collect(slice)) do
+            if slice() and (self.Dead or epoch ~= self.Epoch or self.CurrentLanguage ~= language) then
+                if changed then self:Commit(); self:ScheduleSave() end
+                return
+            end
             local value = dict[source]
             if type(value) == "string" and not marks[source] and not self.Config.NoTranslate[source]
                 and not (type(manual) == "table" and manual[source]) then
@@ -2363,11 +2563,11 @@ do
                     budget = budget - 1
                     local fixed, verdict = self:Repair(language, source, value, reason, epoch)
                     if self.Dead or epoch ~= self.Epoch or self.CurrentLanguage ~= language or verdict == "cancelled" then
-                        if changed then self:ApplyAll(); self:ScheduleSave() end
+                        if changed then self:Commit(); self:ScheduleSave() end
                         return
                     end
                     if verdict == "net" then
-                        if changed then self:ApplyAll(); self:ScheduleSave() end
+                        if changed then self:Commit(); self:ScheduleSave() end
                         self:Retry()
                         return
                     elseif verdict == "bad" then
@@ -2387,7 +2587,7 @@ do
                 end
             end
         end
-        if changed then self:ApplyAll(); self:ScheduleSave() end
+        if changed then self:Commit(); self:ScheduleSave() end
         if skipped then self.Pending = true end
     end
 
@@ -2465,13 +2665,17 @@ do
         end)
     end
 
-    function LM:BuildBatches(sources, language)
+    function LM:BuildBatches(sources, language, epoch)
+        local slice = newSlicer(self.Config.FrameBudget)
         local batches, batch = {}, {}
         local base = #self:URL({}, language)
         local markerLen = #httpService:UrlEncode(string.format("ZXQB%06dQXZ\n", 1)) + #httpService:UrlEncode("\n")
         local used = base
         local limit, maxItems = self.Config.MaxURLLength, self.Config.BatchSize
         for _, source in ipairs(sources) do
+            if slice() and (self.Dead or epoch ~= self.Epoch or self.CurrentLanguage ~= language) then
+                return {}, true
+            end
             if self:NeedsTranslation(source, language) then
                 local text, tags = self:Protect(source)
                 if text then
@@ -2496,7 +2700,7 @@ do
             end
         end
         if #batch > 0 then table.insert(batches, batch) end
-        return batches
+        return batches, false
     end
 
     function LM:HandleResult(batch, result, reason, language, epoch, sources)
@@ -2514,7 +2718,7 @@ do
                     self.Failed[language][item.Source] = os.clock() + self.Config.RetryCooldown
                 end
             end
-            self:ApplyAll()
+            if not self.Held then self:CommitSoon() end
             self:ScheduleSave()
             if missing then self:Retry() else self.FailCount = 0 end
         elseif reason ~= "cancelled" and self.CurrentLanguage == language then
@@ -2566,29 +2770,38 @@ do
     function LM:Work()
         while self.Active and not self.Dead and self.Config.AutoTranslations do
             local epoch, language = self.Epoch, self.CurrentLanguage
-            local sources = self:Collect()
-            local batches = self:BuildBatches(sources, language)
-            if #batches == 0 then
-                if self.ToastDone ~= language and not self.Pending and not self.Dead then
-                    self.ToastStart, self.ToastDone, self.ToastFail = language, language, nil
-                    self:Toast("Done", language)
+            local sources = self:Collect(newSlicer(self.Config.FrameBudget))
+            local batches, stale = {}, true
+            if not self.Dead and epoch == self.Epoch and language == self.CurrentLanguage then
+                batches, stale = self:BuildBatches(sources, language, epoch)
+            end
+            if not stale then
+                if #batches == 0 then
+                    self:ReleaseHold()
+                    if self.ToastDone ~= language and not self.Pending and not self.Dead then
+                        self.ToastStart, self.ToastDone, self.ToastFail = language, language, nil
+                        self:Toast("Done", language)
+                    end
+                    self:Audit(language, epoch)
+                    break
                 end
-                self:Audit(language, epoch)
-                break
+                if language ~= self.Config.SourceLanguage and self.ToastStart ~= language then
+                    self.ToastStart, self.ToastDone, self.ToastFail = language, nil, nil
+                    self:Toast("Start", language)
+                end
+                local netFail = self:RunBatches(batches, language, epoch, sources)
+                if self.Dead or netFail then
+                    self:ReleaseHold()
+                    break
+                end
             end
-            if language ~= self.Config.SourceLanguage and self.ToastStart ~= language then
-                self.ToastStart, self.ToastDone, self.ToastFail = language, nil, nil
-                self:Toast("Start", language)
-            end
-            local netFail = self:RunBatches(batches, language, epoch, sources)
-            if self.Dead or netFail then break end
         end
     end
 
-    function LM:Schedule()
+    function LM:Schedule(delay)
         if self.Dead or not self.Active or not self.Config.AutoTranslations or self.Scheduled then return end
         self.Scheduled = true
-        task.delay(self.Config.Debounce, function()
+        task.delay(delay or self.Config.Debounce, function()
             self.Scheduled = false
             if self.Dead then return end
             if self.Busy then self.Pending = true; return end
@@ -2596,7 +2809,7 @@ do
             local ok, err = pcall(function() self:Work() end)
             self.Busy = false
             if not ok then self:Error(err) end
-            if self.Pending then self.Pending = false; self:Schedule() end
+            if self.Pending then self.Pending = false; self:Schedule() else self:ReleaseHold() end
         end)
     end
 
@@ -2648,8 +2861,16 @@ do
         self.CurrentLanguage = code
         self.FailCount = 0
         self.ToastStart, self.ToastDone, self.ToastFail = nil, nil, nil
-        self:ApplyAll()
-        self:Schedule()
+        if self.Config.AutoTranslations and self.Config.SyncSwap
+            and code ~= self.Config.SourceLanguage and code ~= self.DisplayLanguage then
+            self:Hold()
+        else
+            self.Held = false
+            self.HoldToken = self.HoldToken + 1
+            self.DisplayLanguage = code
+            self:Commit()
+            self:Schedule()
+        end
         self:ScheduleSave()
         if previous ~= code then self:Notify(previous) end
         return true
@@ -2722,16 +2943,26 @@ do
         self:Schedule()
     end
 
+    function LM:DropdownValues()
+        local values = self:GetLanguages()
+        if not table.find(values, self.CurrentLanguage) then table.insert(values, self.CurrentLanguage) end
+        return values, table.concat(values, "\n")
+    end
+
     function LM:SyncDropdowns()
         for dropdown, entry in pairs(self.Dropdowns) do
             if dropdown.Elements and dropdown.Elements.TitleLabel.Parent == nil then
                 self.Dropdowns[dropdown] = nil
             else
+                local values, key = self:DropdownValues()
                 entry.Syncing = true
-                local values = self:GetLanguages()
-                if not table.find(values, self.CurrentLanguage) then table.insert(values, self.CurrentLanguage) end
-                dropdown:SetValues(values)
-                dropdown:SetValue(self.CurrentLanguage)
+                if entry.Key ~= key then
+                    entry.Key = key
+                    dropdown:SetValues(values)
+                    dropdown:SetValue(self.CurrentLanguage)
+                elseif dropdown.Value ~= self.CurrentLanguage then
+                    dropdown:SetValue(self.CurrentLanguage)
+                end
                 entry.Syncing = false
             end
         end
@@ -2740,6 +2971,8 @@ do
     function LM:AddDropdown(tab, options)
         options = options or {}
         local entry = {Syncing = true}
+        local _, key = self:DropdownValues()
+        entry.Key = key
         local dropdown = tab:AddDropdown(options.Id or "FluentLanguage", {
             Title = options.Title or "Language", Description = options.Description,
             Values = self:GetLanguages(), Default = self.CurrentLanguage,
@@ -2769,6 +3002,7 @@ do
         for _, item in ipairs(type(options.Notranslations) == "table" and options.Notranslations or {}) do
             if type(item) == "string" then noTranslate[item] = true end
         end
+        local firstConfigure = self.Config == nil
         local oldSource = self.Config and self.Config.SourceLanguage
         local oldFile = self.Config and self.Config.CacheFile
         self.Config = {
@@ -2787,7 +3021,13 @@ do
             Request = options.Request, OnError = options.OnError,
             Verify = options.Verify ~= false, OnRepair = options.OnRepair,
             Notifications = options.Notifications ~= false, Messages = options.Messages,
+            SyncSwap = options.SyncSwap ~= false,
+            SwapTimeout = math.max(2, tonumber(options.SwapTimeout) or 10),
+            FrameBudget = math.max(0.0005, math.min(0.012, tonumber(options.FrameBudget) or 0.003)),
+            SyncBudget = math.max(0.001, math.min(0.016, tonumber(options.SyncBudget) or 0.006)),
+            SaveDelay = math.max(0.5, tonumber(options.SaveDelay) or 2),
         }
+        if firstConfigure then self.DisplayLanguage = source end
         self:BuildTerms()
         if oldSource ~= source or oldFile ~= self.Config.CacheFile then self.Cache, self.Marks, self.Bad = {}, {}, {} end
         self.Epoch = self.Epoch + 1
@@ -2798,9 +3038,17 @@ do
         local selected = self:Code(options.Language) or (self.Config.SaveSelection and saved) or default
         if not self.Config.Enabled or not self:IsAvailable(selected) then selected = default end
         self.CurrentLanguage = selected
-        self:ApplyAll()
+        if self.Config.AutoTranslations and self.Config.SyncSwap
+            and selected ~= source and selected ~= self.DisplayLanguage then
+            self:Hold()
+        else
+            self.Held = false
+            self.HoldToken = self.HoldToken + 1
+            self.DisplayLanguage = selected
+            self:Commit()
+            self:Schedule()
+        end
         self:Notify(previous)
-        self:Schedule()
         self:ScheduleSave()
         return self
     end

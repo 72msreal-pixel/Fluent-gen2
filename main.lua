@@ -1719,8 +1719,6 @@ do
 
     local NO_TRANSLATE_KEYS = { notranslations = true, notranslation = true, notranslate = true, donottranslate = true }
 
-    -- Pulls the "Notranslations" list (e.g. en = { Notranslations = { "NaN Hub" } }) out of a language
-    -- table: the names go into `set`, and a clean copy (strings only) is returned.
     function LM:SplitDictionary(dict, set)
         local clean = {}
         for key, value in pairs(dict) do
@@ -1739,7 +1737,6 @@ do
         return clean
     end
 
-    -- Sorted (longest first) list of protected terms, rebuilt whenever the set changes.
     function LM:BuildTerms()
         local list = {}
         for term in pairs(self.Config.NoTranslate) do
@@ -1763,7 +1760,6 @@ do
         return false
     end
 
-    -- Replaces every plain occurrence of each protected term using `make(term)`.
     function LM:MaskProtected(text, make)
         for _, term in ipairs(self.Config.NoTranslateList) do
             local out, cursor = {}, 1

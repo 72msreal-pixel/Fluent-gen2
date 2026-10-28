@@ -1739,6 +1739,49 @@ do
         return clean
     end
 
+    -- Sorted (longest first) list of protected terms, rebuilt whenever the set changes.
+    function LM:BuildTerms()
+        local list = {}
+        for term in pairs(self.Config.NoTranslate) do
+            if term ~= "" then table.insert(list, term) end
+        end
+        table.sort(list, function(a, b)
+            if #a ~= #b then return #a > #b end
+            return a < b
+        end)
+        self.Config.NoTranslateList = list
+    end
+
+    function LM:NoTranslateKey()
+        return table.concat(self.Config.NoTranslateList, "\n")
+    end
+
+    function LM:HasProtected(text)
+        for _, term in ipairs(self.Config.NoTranslateList) do
+            if text:find(term, 1, true) then return true end
+        end
+        return false
+    end
+
+    -- Replaces every plain occurrence of each protected term using `make(term)`.
+    function LM:MaskProtected(text, make)
+        for _, term in ipairs(self.Config.NoTranslateList) do
+            local out, cursor = {}, 1
+            while true do
+                local first, last = text:find(term, cursor, true)
+                if not first then break end
+                table.insert(out, text:sub(cursor, first - 1))
+                table.insert(out, make(term))
+                cursor = last + 1
+            end
+            if cursor > 1 then
+                table.insert(out, text:sub(cursor))
+                text = table.concat(out)
+            end
+        end
+        return text
+    end
+
     function LM:Lookup(source, language)
         if self.Config.NoTranslate[source] then return source, true end
         local dict = self.Config.Translations[language]
@@ -1904,6 +1947,7 @@ do
         local decoded, data = pcall(function() return httpService:JSONDecode(content) end)
         if not decoded or type(data) ~= "table" or (data.Version ~= 1 and data.Version ~= 2)
             or data.SourceLanguage ~= self.Config.SourceLanguage then return nil end
+        local staleTerms = data.NoTranslateKey ~= self:NoTranslateKey()
         if type(data.Translations) == "table" then
             for code, dict in pairs(data.Translations) do
                 local normalized = self:Code(code)
@@ -1911,7 +1955,7 @@ do
                     self.Cache[normalized] = self.Cache[normalized] or {}
                     self.Marks[normalized] = self.Marks[normalized] or {}
                     for source, entry in pairs(dict) do
-                        if type(source) == "string" then
+                        if type(source) == "string" and not (staleTerms and self:HasProtected(source)) then
                             if type(entry) == "string" then
                                 self.Cache[normalized][source] = entry
                             elseif type(entry) == "table" and type(entry.t) == "string" then
@@ -1966,6 +2010,7 @@ do
             blocks[self.Config.SourceLanguage] = base
             writefile(self.Config.CacheFile, httpService:JSONEncode({
                 Version = 2, SourceLanguage = self.Config.SourceLanguage,
+                NoTranslateKey = self:NoTranslateKey(),
                 SelectedLanguage = self.Config.SaveSelection and self.CurrentLanguage or nil,
                 Translations = blocks,
             }))
@@ -2032,6 +2077,10 @@ do
         local tags = {}
         local text = source:gsub("<[^>]+>", function(tag)
             table.insert(tags, tag)
+            return string.format("ZXQT%04dQXZ", #tags)
+        end)
+        text = self:MaskProtected(text, function(term)
+            table.insert(tags, term)
             return string.format("ZXQT%04dQXZ", #tags)
         end)
         return text, tags
@@ -2216,6 +2265,8 @@ do
 
     function LM:Check(language, source, value)
         if type(value) ~= "string" or value:match("^%s*$") then return "empty" end
+        source = self:MaskProtected(source, function() return " " end)
+        value = self:MaskProtected(value, function() return " " end)
         local prefix = language:match("^[a-z]+") or language
         local own = OWN[prefix]
         local allowed = {latin = true}
@@ -2269,7 +2320,7 @@ do
     end
 
     function LM:Repair(language, source, value, reason, epoch)
-        if source:find("<", 1, true) then return value, "ok" end
+        if source:find("<", 1, true) or self:HasProtected(source) then return value, "ok" end
         local lead, tail = source:match("^%s*") or "", source:match("%s*$") or ""
         local fresh, why = self:Plain(source, self.Config.SourceLanguage, language, epoch, language)
         if why == "cancelled" then return nil, "cancelled" end
@@ -2630,6 +2681,7 @@ do
             target[source] = value ~= false and value or nil
         end
         self.Config.Translations[language] = target
+        self:BuildTerms()
         return self:Refresh()
     end
 
@@ -2740,6 +2792,7 @@ do
             Verify = options.Verify ~= false, OnRepair = options.OnRepair,
             Notifications = options.Notifications ~= false, Messages = options.Messages,
         }
+        self:BuildTerms()
         if oldSource ~= source or oldFile ~= self.Config.CacheFile then self.Cache, self.Marks, self.Bad = {}, {}, {} end
         self.Epoch = self.Epoch + 1
         self.Failed = {}

@@ -1717,7 +1717,30 @@ do
         return type(defaults) == "table" and type(defaults[source]) == "string" and defaults[source] or source
     end
 
+    local NO_TRANSLATE_KEYS = { notranslations = true, notranslation = true, notranslate = true, donottranslate = true }
+
+    -- Pulls the "Notranslations" list (e.g. en = { Notranslations = { "NaN Hub" } }) out of a language
+    -- table: the names go into `set`, and a clean copy (strings only) is returned.
+    function LM:SplitDictionary(dict, set)
+        local clean = {}
+        for key, value in pairs(dict) do
+            if type(key) == "string" and NO_TRANSLATE_KEYS[(key:lower():gsub("[%s_%-]", ""))] then
+                if type(value) == "string" then
+                    set[value] = true
+                elseif type(value) == "table" then
+                    for _, item in pairs(value) do
+                        if type(item) == "string" then set[item] = true end
+                    end
+                end
+            else
+                clean[key] = value
+            end
+        end
+        return clean
+    end
+
     function LM:Lookup(source, language)
+        if self.Config.NoTranslate[source] then return source, true end
         local dict = self.Config.Translations[language]
         if type(dict) == "table" and type(dict[source]) == "string" then return dict[source], true end
         if language == self.Config.SourceLanguage then return source, true end
@@ -2281,7 +2304,8 @@ do
         local budget, changed, skipped = 8, false, false
         for _, source in ipairs(self:Collect()) do
             local value = dict[source]
-            if type(value) == "string" and not marks[source] and not (type(manual) == "table" and manual[source]) then
+            if type(value) == "string" and not marks[source] and not self.Config.NoTranslate[source]
+                and not (type(manual) == "table" and manual[source]) then
                 local reason = self:Check(language, source, value)
                 if not reason then
                     marks[source] = "ok"
@@ -2600,6 +2624,7 @@ do
         language = self:Code(language)
         assert(language and type(dictionary) == "table", "Expected language code and dictionary")
         local target = replace and {} or (self.Config.Translations[language] or {})
+        dictionary = self:SplitDictionary(dictionary, self.Config.NoTranslate)
         for source, value in pairs(dictionary) do
             assert(type(source) == "string" and (type(value) == "string" or value == false), "Translations must map source strings to strings (false removes an entry)")
             target[source] = value ~= false and value or nil
@@ -2687,17 +2712,20 @@ do
         options = options or {}
         local default = assert(self:Code(options.DefaultLanguage or "en"), "Invalid DefaultLanguage")
         local source = assert(self:Code(options.SourceLanguage or default), "Invalid SourceLanguage")
-        local translations = {}
+        local translations, noTranslate = {}, {}
         for code, dict in pairs(options.Translations or {}) do
             local normalized = self:Code(code)
             assert(normalized and type(dict) == "table", "Translations must contain language tables")
-            translations[normalized] = dict
+            translations[normalized] = self:SplitDictionary(dict, noTranslate)
+        end
+        for _, item in ipairs(type(options.Notranslations) == "table" and options.Notranslations or {}) do
+            if type(item) == "string" then noTranslate[item] = true end
         end
         local oldSource = self.Config and self.Config.SourceLanguage
         local oldFile = self.Config and self.Config.CacheFile
         self.Config = {
             Enabled = options.Enabled ~= false, AutoTranslations = options.AutoTranslations == true,
-            DefaultLanguage = default, SourceLanguage = source, Translations = translations,
+            DefaultLanguage = default, SourceLanguage = source, Translations = translations, NoTranslate = noTranslate,
             Languages = options.Languages or {"en", "vi", "zh-CN", "zh-TW", "ja", "ko", "fr", "de", "es", "th", "id", "pt", "ru", "ar"},
             Cache = options.Cache ~= false, CacheFile = options.CacheFile or "Fluent/LanguageCache.json",
             SaveSelection = options.SaveSelection ~= false, AutoPruneCache = options.AutoPruneCache == true,

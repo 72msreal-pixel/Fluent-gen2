@@ -7068,7 +7068,7 @@ Components.Window = (function()
 
 			local PAD = HasIcon and 24 or 20
 			local Align = HasIcon and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left
-			local TitleY = HasIcon and 64 or 14
+			local TitleY = HasIcon and 64 or 8
 			local ContentY = HasIcon and 100 or 48
 			local MinH = HasIcon and 140 or 110
 			local FOOTER = 58

@@ -5066,7 +5066,7 @@ Components.Dialog = (function()
 						1 / NewDialog.Buttons,
 						-(((NewDialog.Buttons - 1) * 10) / NewDialog.Buttons),
 						0,
-						Fancy and 34 or 32
+						Fancy and 36 or 32
 					)
 				end
 			end
@@ -5092,23 +5092,23 @@ Components.Dialog = (function()
 					SetPress(1)
 				end)
 
+				Button.Title.TextSize = 14
+				local Stroke = Button.Frame:FindFirstChildOfClass("UIStroke")
+
 				if Style == "Danger" then
+					local Normal = Color3.fromRGB(222, 72, 80)
+					local Hover = Color3.fromRGB(238, 92, 98)
 					local Fill = New("Frame", {
 						Size = UDim2.fromScale(1, 1),
-						BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-						BackgroundTransparency = 0.05,
+						BackgroundColor3 = Normal,
+						BackgroundTransparency = 0,
 						BorderSizePixel = 0,
 						ZIndex = 0,
 						Parent = Button.Frame,
 					}, {
 						New("UICorner", { CornerRadius = UDim.new(0, 8) }),
-						New("UIGradient", {
-							Rotation = 90,
-							Color = ColorSequence.new(Color3.fromRGB(236, 92, 96), Color3.fromRGB(200, 58, 66)),
-						}),
 					})
 					Button.Frame.BackgroundTransparency = 1
-					local Stroke = Button.Frame:FindFirstChildOfClass("UIStroke")
 					if Stroke then
 						Stroke.Transparency = 1
 					end
@@ -5119,13 +5119,20 @@ Components.Dialog = (function()
 					end
 					Button.Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 
-					local _, SetFill = Creator.SpringMotor(0.05, Fill, "BackgroundTransparency", true)
+					local TweenService = game:GetService("TweenService")
+					local Info = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 					Creator.AddSignal(Button.Frame.MouseEnter, function()
-						SetFill(0)
+						TweenService:Create(Fill, Info, { BackgroundColor3 = Hover }):Play()
 					end)
 					Creator.AddSignal(Button.Frame.MouseLeave, function()
-						SetFill(0.05)
+						TweenService:Create(Fill, Info, { BackgroundColor3 = Normal }):Play()
 					end)
+				else
+					-- nút thường: nền nhạt + viền mảnh, hợp với theme
+					Button.Frame.BackgroundTransparency = 0.5
+					if Stroke then
+						Stroke.Transparency = 0.45
+					end
 				end
 			end
 
@@ -7185,7 +7192,7 @@ Components.Window = (function()
 					H = math.ceil(TextService:GetTextSize(Plain, 13, Enum.Font.Gotham, Vector2.new(WrapW, 10000)).Y)
 				end)
 				Content.Size = UDim2.new(1, -6, 0, H)
-				Dialog.Root.Size = UDim2.fromOffset(baseWidth, math.clamp(ContentY + H + 14 + FOOTER, 140, 400))
+				Dialog.Root.Size = UDim2.fromOffset(baseWidth, math.clamp(ContentY + H + 6 + FOOTER, 140, 400))
 			end
 
 			Fit()

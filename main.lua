@@ -4988,6 +4988,14 @@ Components.Dialog = (function()
 			NewDialog.Scale.Scale = Value
 		end)
 
+		-- kiểu Fancy: không scale (scale làm chữ bị méo/nhảy dòng), chỉ trượt nhẹ + fade
+		local SlideMotor = Flipper.SingleMotor.new(10)
+		SlideMotor:onStep(function(Value)
+			if NewDialog.Root then
+				NewDialog.Root.Position = UDim2.new(0.5, 0, 0.5, math.round(Value))
+			end
+		end)
+
 		NewDialog.Root = New("CanvasGroup", {
 			Size = UDim2.fromOffset(300, 165),
 			AnchorPoint = Vector2.new(0.5, 0.5),
@@ -5018,14 +5026,24 @@ Components.Dialog = (function()
 			Library.DialogOpen = true
 			TintTransparency(NewDialog.Fancy and 0.55 or 0.75)
 			RootTransparency(0)
-			ScaleMotor:setGoal(Spring(1, { frequency = 5, dampingRatio = 0.72 }))
+			if NewDialog.Fancy then
+				NewDialog.Scale.Scale = 1
+				NewDialog.Root.Position = UDim2.new(0.5, 0, 0.5, 10)
+				SlideMotor:setGoal(Spring(0, { frequency = 7, dampingRatio = 1 }))
+			else
+				ScaleMotor:setGoal(Spring(1, { frequency = 5, dampingRatio = 0.72 }))
+			end
 		end
 
 		function NewDialog:Close()
 			Library.DialogOpen = false
 			TintTransparency(1)
 			RootTransparency(1)
-			ScaleMotor:setGoal(Spring(0.93, { frequency = 9, dampingRatio = 1 }))
+			if NewDialog.Fancy then
+				SlideMotor:setGoal(Spring(6, { frequency = 9, dampingRatio = 1 }))
+			else
+				ScaleMotor:setGoal(Spring(0.93, { frequency = 9, dampingRatio = 1 }))
+			end
 			pcall(function()
 				NewDialog.Root.UIStroke:Destroy()
 			end)
@@ -7010,8 +7028,16 @@ Components.Window = (function()
 			local Align = HasIcon and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left
 			local TitleY = HasIcon and 64 or 20
 			local ContentY = HasIcon and 92 or 54
-			local FOOTER = 62
+			local FOOTER = 58
 
+			Dialog.Scale.Scale = 1
+			-- bỏ nền phụ + đường kẻ của footer
+			Dialog.ButtonHolderFrame.BackgroundTransparency = 1
+			for _, Child in next, Dialog.ButtonHolderFrame:GetChildren() do
+				if Child:IsA("Frame") and Child ~= Dialog.ButtonHolder then
+					Child.Visible = false
+				end
+			end
 			Dialog.ButtonHolderFrame.Size = UDim2.new(1, 0, 0, FOOTER)
 			Dialog.ButtonHolderFrame.Position = UDim2.new(0, 0, 1, -FOOTER)
 			Dialog.ButtonHolder.Size = UDim2.new(1, -32, 1, 0)
@@ -7125,16 +7151,15 @@ Components.Window = (function()
 				TextSize = 13,
 				TextXAlignment = Align,
 				TextYAlignment = Enum.TextYAlignment.Top,
-				AutomaticSize = Enum.AutomaticSize.Y,
 				TextWrapped = true,
-				Size = UDim2.new(1, -6, 0, 0),
+				Size = UDim2.new(1, -6, 0, 18),
 				BackgroundTransparency = 1,
 				Parent = ContentHolder,
 				ThemeTag = { TextColor3 = "Text" },
 			})
 
 			New("UISizeConstraint", {
-				MinSize = Vector2.new(280, 170),
+				MinSize = Vector2.new(280, 140),
 				MaxSize = Vector2.new(460, math.huge),
 				Parent = Dialog.Root,
 			})
@@ -7148,18 +7173,24 @@ Components.Window = (function()
 			local maxWidth = math.max(280, math.min(400, Window.Size.X.Offset - 80))
 			local baseWidth = math.max(300, math.min(maxWidth, TextW * 0.75 + PAD * 2))
 
+			-- tính sẵn số dòng bằng TextService → kích thước chốt 1 lần, không nhảy 1/2 dòng
 			local function Fit()
 				if not Dialog.Root or not Dialog.Root.Parent then
 					return
 				end
-				local H = ContentY + Content.TextBounds.Y + 16 + FOOTER
-				Dialog.Root.Size = UDim2.fromOffset(baseWidth, math.clamp(H, 170, 400))
+				local H = 18
+				pcall(function()
+					local Plain = tostring(Content.Text):gsub("<[^>]+>", "")
+					local WrapW = math.max(60, baseWidth - PAD * 2 - 14)
+					H = math.ceil(TextService:GetTextSize(Plain, 13, Enum.Font.Gotham, Vector2.new(WrapW, 10000)).Y)
+				end)
+				Content.Size = UDim2.new(1, -6, 0, H)
+				Dialog.Root.Size = UDim2.fromOffset(baseWidth, math.clamp(ContentY + H + 14 + FOOTER, 140, 400))
 			end
 
-			Dialog.Root.Size = UDim2.fromOffset(baseWidth, 170)
-			task.defer(Fit)
-			-- text đổi (dịch ngôn ngữ) thì tự co giãn lại
-			Creator.AddSignal(Content:GetPropertyChangedSignal("TextBounds"), Fit)
+			Fit()
+			-- text đổi (dịch ngôn ngữ) thì tính lại
+			Creator.AddSignal(Content:GetPropertyChangedSignal("Text"), Fit)
 
 			for _, Button in next, Config.Buttons do
 				Dialog:Button(Button.Title, Button.Callback, Button.Style)

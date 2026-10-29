@@ -5269,13 +5269,13 @@ Components.Notification = (function()
 
 		NewNotification.CloseButton = New("TextButton", {
 			Text = "",
-			Position = UDim2.new(1, -PAD, 0, PAD - 1),
+			Position = UDim2.new(1, -PAD, 0, 11),
 			Size = UDim2.fromOffset(20, 20),
-			AnchorPoint = Vector2.new(1, 0),
+			AnchorPoint = Vector2.new(0.5, 0.5),
 			BackgroundTransparency = 1,
 		}, {
 			Library:IconLabel("x", {
-				Size = UDim2.fromOffset(16, 16),
+				Size = UDim2.fromOffset(12, 12),
 				Position = UDim2.fromScale(0.5, 0.5),
 				AnchorPoint = Vector2.new(0.5, 0.5),
 				BackgroundTransparency = 1,
@@ -5288,7 +5288,7 @@ Components.Notification = (function()
 		NewNotification.Icon = HasIcon and Library:IconLabel(Config.Icon, {
 			Size = UDim2.fromOffset(ICON, ICON),
 			AnchorPoint = Vector2.new(0, 0.5),
-			Position = UDim2.new(0, PAD, 0.5, 0),
+			Position = UDim2.new(0, PAD, 0.5, 3),
 			BackgroundTransparency = 1,
 			ImageColor3 = Config.IconColor,
 			ThemeTag = not Config.IconColor and { ImageColor3 = "Text" } or nil,

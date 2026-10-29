@@ -3157,22 +3157,7 @@ local New = Creator.New
 local Core = { State = {} }
 Library.Core = Core
 
-Core.Parent = (function()
-	if gethui then
-		local Ok, Hui = pcall(gethui)
-		if Ok and typeof(Hui) == "Instance" then
-			return Hui
-		end
-	end
-	if pcall(function()
-		local Probe = Instance.new("ScreenGui")
-		Probe.Parent = Services.CoreGui
-		Probe:Destroy()
-	end) then
-		return Services.CoreGui
-	end
-	return LocalPlayer:WaitForChild("PlayerGui")
-end)()
+Core.Parent = gethui and gethui() or Services.CoreGui
 
 function Core.Create(Props)
 	Props = Props or {}
@@ -3271,7 +3256,7 @@ end
 local viewportPointToWorld, getOffset = unpack({ viewportPointToWorld, getOffset })
 
 local BlurFolder = Instance.new("Folder")
-BlurFolder.Name = "FluentBlur"
+BlurFolder.Name = httpService:GenerateGUID(false)
 do
 	local ws = Services.Workspace
 	local function attachToCurrentCamera()
@@ -3545,6 +3530,7 @@ local Acrylic = {
 
 function Acrylic.init()
 	local baseEffect = Instance.new("DepthOfFieldEffect")
+	baseEffect.Name = httpService:GenerateGUID(false)
 	baseEffect.FarIntensity = 0
 	baseEffect.InFocusRadius = 0.1
 	baseEffect.NearIntensity = 1
@@ -9961,7 +9947,6 @@ end
 
 function StatusBar.Build(Config)
 	StatusBar.Gui = Core.Create({
-		Name = "FluentStatusBar",
 		IgnoreGuiInset = true,
 		DisplayOrder = 1001,
 	})

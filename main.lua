@@ -7106,9 +7106,7 @@ Components.Window = (function()
 			Dialog.ButtonHolderFrame.BackgroundTransparency = 1
 			for _, Child in next, Dialog.ButtonHolderFrame:GetChildren() do
 				if Child:IsA("Frame") and Child ~= Dialog.ButtonHolder then
-					-- Giữ đường kẻ mảnh ngăn footer, cùng màu với đường kẻ title bar
-					Creator.OverrideTag(Child, { BackgroundColor3 = "TitleBarLine" })
-					Child.BackgroundTransparency = 0.5
+					Child.Visible = false
 				end
 			end
 			Dialog.ButtonHolderFrame.Size = UDim2.new(1, 0, 0, FOOTER)

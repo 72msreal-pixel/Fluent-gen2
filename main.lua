@@ -5288,7 +5288,7 @@ Components.Notification = (function()
 		NewNotification.Icon = HasIcon and Library:IconLabel(Config.Icon, {
 			Size = UDim2.fromOffset(ICON, ICON),
 			AnchorPoint = Vector2.new(0, 0.5),
-			Position = UDim2.new(0, PAD, 0.5, 3),
+			Position = UDim2.new(0, PAD, 0.5, 2),
 			BackgroundTransparency = 1,
 			ImageColor3 = Config.IconColor,
 			ThemeTag = not Config.IconColor and { ImageColor3 = "Text" } or nil,

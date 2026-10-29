@@ -3871,42 +3871,82 @@ Components.Section = (function()
 			})
 		end
 
+		local IconSize = HasDesc and 20 or 16
+		local AlignName = typeof(Config.TextXAlignment) == "EnumItem" and Config.TextXAlignment.Name or Config.TextXAlignment
+		local TextAlign = (AlignName == "Center" and Enum.TextXAlignment.Center)
+			or (AlignName == "Right" and Enum.TextXAlignment.Right)
+			or Enum.TextXAlignment.Left
+
+		local function Label(Props)
+			Props.RichText = true
+			Props.TextYAlignment = Enum.TextYAlignment.Center
+			Props.BackgroundTransparency = 1
+			return New("TextLabel", Props)
+		end
+
+		-- Icon nam o giua (doc) khoi title + desc, title/desc thang hang ben phai icon (kieu WindUI)
+		local TextColumn = New("Frame", {
+			Size = HasDesc and UDim2.new(1, Icon and -(IconSize + 6) or 0, 1, 0) or UDim2.fromScale(0, 1),
+			AutomaticSize = HasDesc and Enum.AutomaticSize.None or Enum.AutomaticSize.X,
+			BackgroundTransparency = 1,
+			LayoutOrder = 2,
+		}, {
+			New("UIListLayout", {
+				Padding = UDim.new(0, 2),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+				VerticalAlignment = Enum.VerticalAlignment.Center,
+			}),
+			Label({
+				Text = Title,
+				TextTransparency = Config.TextTransparency or 0,
+				FontFace = Font.new("rbxassetid://12187365364", ResolveWeight(Config.FontWeight), Enum.FontStyle.Normal),
+				TextSize = TextSize,
+				TextXAlignment = HasDesc and TextAlign or Enum.TextXAlignment.Left,
+				TextTruncate = HasDesc and Enum.TextTruncate.AtEnd or Enum.TextTruncate.None,
+				Size = HasDesc and UDim2.new(1, 0, 0, 18) or UDim2.fromScale(0, 1),
+				AutomaticSize = HasDesc and Enum.AutomaticSize.None or Enum.AutomaticSize.X,
+				LayoutOrder = 1,
+				ThemeTag = {
+					TextColor3 = "Text",
+				},
+			}),
+			HasDesc and Label({
+				Name = "SectionDesc",
+				Text = Desc,
+				TextSize = 13,
+				TextTransparency = 0.25,
+				TextXAlignment = TextAlign,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+				FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
+				Size = UDim2.new(1, 0, 0, 14),
+				LayoutOrder = 2,
+				ThemeTag = {
+					TextColor3 = "SubText",
+				},
+			}) or nil,
+		})
+
 		local SectionHeader = New("Frame", {
-			Size = UDim2.new(1, (Collapsible and -32 or -16) - SIDE_PAD * 2, 0, 18),
+			Size = UDim2.new(1, (Collapsible and -32 or -16) - SIDE_PAD * 2, 0, 18 + DESC_H),
 			Position = UDim2.fromOffset(SIDE_PAD, Box and 7 or 2),
 			BackgroundTransparency = 1,
 		}, {
 			New("UIListLayout", {
-				Padding = UDim.new(0, 5),
+				Padding = UDim.new(0, 6),
 				FillDirection = Enum.FillDirection.Horizontal,
 				SortOrder = Enum.SortOrder.LayoutOrder,
 				VerticalAlignment = Enum.VerticalAlignment.Center,
 				HorizontalAlignment = ResolveHAlign(Config.TextXAlignment),
 			}),
 			Icon and Library:IconLabel(Icon, {
-				Size = UDim2.fromOffset(16, 16),
+				Size = UDim2.fromOffset(IconSize, IconSize),
 				BackgroundTransparency = 1,
 				LayoutOrder = 1,
 				ThemeTag = {
 					ImageColor3 = "Text",
 				},
 			}) or nil,
-			New("TextLabel", {
-				RichText = true,
-				Text = Title,
-				TextTransparency = Config.TextTransparency or 0,
-				FontFace = Font.new("rbxassetid://12187365364", ResolveWeight(Config.FontWeight), Enum.FontStyle.Normal),
-				TextSize = TextSize,
-				TextXAlignment = "Left",
-				TextYAlignment = "Center",
-				Size = UDim2.fromScale(0, 1),
-				AutomaticSize = Enum.AutomaticSize.X,
-				BackgroundTransparency = 1,
-				LayoutOrder = 2,
-				ThemeTag = {
-					TextColor3 = "Text",
-				},
-			}),
+			TextColumn,
 		})
 
 		if not Collapsible then
@@ -3935,24 +3975,6 @@ Components.Section = (function()
 			},
 		})
 
-		local DescLabel = HasDesc and New("TextLabel", {
-			Name = "SectionDesc",
-			RichText = true,
-			Text = Desc,
-			TextSize = 13,
-			TextTransparency = 0.25,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			TextYAlignment = Enum.TextYAlignment.Center,
-			TextTruncate = Enum.TextTruncate.AtEnd,
-			FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
-			Size = UDim2.new(1, -32 - SIDE_PAD * 2, 0, 14),
-			Position = UDim2.fromOffset(SIDE_PAD, (Box and 7 or 2) + 20),
-			BackgroundTransparency = 1,
-			ThemeTag = {
-				TextColor3 = "SubText",
-			},
-		}) or nil
-
 		local HeaderButton = New("TextButton", {
 			Size = UDim2.new(1, 0, 0, (Box and 30 or 22) + DESC_H),
 			Position = UDim2.fromOffset(0, 0),
@@ -3963,7 +3985,6 @@ Components.Section = (function()
 
 		local RootChildren = {
 			SectionHeader,
-			DescLabel,
 			Chevron,
 			HeaderButton,
 			Section.Container,
@@ -5193,77 +5214,62 @@ Components.Notification = (function()
 		NewNotification.AcrylicPaint = Acrylic.AcrylicPaint()
 
 		local HasIcon = Config.Icon ~= nil and Config.Icon ~= ""
-		local TextX = HasIcon and 38 or 14
+		local PAD, ICON = 14, 24
+		local TextX = HasIcon and (PAD + ICON + 10) or PAD
+		local GothamFont = "rbxasset://fonts/families/GothamSSm.json"
 
-		NewNotification.Title = New("TextLabel", {
-			Position = UDim2.new(0, TextX, 0, 17),
-			Text = Config.Title,
+		local function Text(Value, Props)
+			Props.Text = Value
+			Props.FontFace = Props.FontFace or Font.new(GothamFont)
+			Props.TextXAlignment = Enum.TextXAlignment.Left
+			Props.AutomaticSize = Enum.AutomaticSize.Y
+			Props.Size = Props.Size or UDim2.new(1, 0, 0, 0)
+			Props.BackgroundTransparency = 1
+			Props.TextWrapped = true
+			Props.Visible = Value ~= ""
+			return New("TextLabel", Props)
+		end
+
+		NewNotification.Title = Text(Config.Title, {
 			RichText = true,
-			TextColor3 = Color3.fromRGB(255, 255, 255),
-			TextTransparency = 0,
-			FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
-			TextSize = 13,
-			TextXAlignment = "Left",
-			TextYAlignment = "Center",
-			Size = UDim2.new(1, -(TextX - 2), 0, 12),
-			TextWrapped = true,
-			BackgroundTransparency = 1,
-			ThemeTag = {
-				TextColor3 = "Text",
-			},
+			TextSize = 15,
+			FontFace = Font.new(GothamFont, Enum.FontWeight.SemiBold),
+			Size = UDim2.new(1, -26, 0, 0),
+			LayoutOrder = 1,
+			ThemeTag = { TextColor3 = "Text" },
 		})
 
-		NewNotification.ContentLabel = New("TextLabel", {
-			FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
-			Text = Config.Content,
-			TextColor3 = Color3.fromRGB(240, 240, 240),
+		NewNotification.ContentLabel = Text(Config.Content, {
 			TextSize = 14,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			AutomaticSize = Enum.AutomaticSize.Y,
-			Size = UDim2.new(1, 0, 0, 14),
-			BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-			BackgroundTransparency = 1,
-			TextWrapped = true,
-			ThemeTag = {
-				TextColor3 = "Text",
-			},
+			LayoutOrder = 2,
+			ThemeTag = { TextColor3 = "Text" },
 		})
 
-		NewNotification.SubContentLabel = New("TextLabel", {
-			FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
-			Text = Config.SubContent,
-			TextColor3 = Color3.fromRGB(240, 240, 240),
+		NewNotification.SubContentLabel = Text(Config.SubContent, {
 			TextSize = 14,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			AutomaticSize = Enum.AutomaticSize.Y,
-			Size = UDim2.new(1, 0, 0, 14),
-			BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-			BackgroundTransparency = 1,
-			TextWrapped = true,
-			ThemeTag = {
-				TextColor3 = "SubText",
-			},
+			LayoutOrder = 3,
+			ThemeTag = { TextColor3 = "SubText" },
 		})
 
+		-- Cot chu nam ben phai icon: title o tren, content/subcontent ngay duoi, cung thang hang
 		NewNotification.LabelHolder = New("Frame", {
 			AutomaticSize = Enum.AutomaticSize.Y,
-			BackgroundColor3 = Color3.fromRGB(255, 255, 255),
 			BackgroundTransparency = 1,
-			Position = UDim2.fromOffset(14, 40),
-			Size = UDim2.new(1, -28, 0, 0),
+			Position = UDim2.fromOffset(TextX, PAD),
+			Size = UDim2.new(1, -(TextX + PAD), 0, 0),
 		}, {
 			New("UIListLayout", {
 				SortOrder = Enum.SortOrder.LayoutOrder,
-				VerticalAlignment = Enum.VerticalAlignment.Center,
-				Padding = UDim.new(0, 3),
+				Padding = UDim.new(0, 4),
 			}),
+			NewNotification.Title,
 			NewNotification.ContentLabel,
 			NewNotification.SubContentLabel,
 		})
 
 		NewNotification.CloseButton = New("TextButton", {
 			Text = "",
-			Position = UDim2.new(1, -14, 0, 13),
+			Position = UDim2.new(1, -PAD, 0, PAD - 1),
 			Size = UDim2.fromOffset(20, 20),
 			AnchorPoint = Vector2.new(1, 0),
 			BackgroundTransparency = 1,
@@ -5281,8 +5287,8 @@ Components.Notification = (function()
 		})
 
 		NewNotification.Icon = HasIcon and Library:IconLabel(Config.Icon, {
-			Size = UDim2.fromOffset(18, 18),
-			Position = UDim2.fromOffset(14, 14),
+			Size = UDim2.fromOffset(ICON, ICON),
+			Position = UDim2.fromOffset(PAD, PAD),
 			BackgroundTransparency = 1,
 			ImageColor3 = Config.IconColor,
 			ThemeTag = not Config.IconColor and { ImageColor3 = "Text" } or nil,
@@ -5294,19 +5300,10 @@ Components.Notification = (function()
 			Position = UDim2.fromScale(1, 0),
 		}, {
 			NewNotification.AcrylicPaint.Frame,
-			NewNotification.Title,
-			NewNotification.CloseButton,
 			NewNotification.LabelHolder,
+			NewNotification.CloseButton,
 			NewNotification.Icon,
 		})
-
-		if Config.Content == "" then
-			NewNotification.ContentLabel.Visible = false
-		end
-
-		if Config.SubContent == "" then
-			NewNotification.SubContentLabel.Visible = false
-		end
 
 		NewNotification.Holder = New("Frame", {
 			BackgroundTransparency = 1,
@@ -5315,6 +5312,13 @@ Components.Notification = (function()
 		}, {
 			NewNotification.Root,
 		})
+
+		local function Fit()
+			if NewNotification.Closed then return end
+			local ContentHeight = math.max(NewNotification.LabelHolder.AbsoluteSize.Y, HasIcon and ICON or 0)
+			NewNotification.Holder.Size = UDim2.new(1, 0, 0, ContentHeight + PAD * 2)
+		end
+		Creator.AddSignal(NewNotification.LabelHolder:GetPropertyChangedSignal("AbsoluteSize"), Fit)
 
 		local RootMotor = Flipper.GroupMotor.new({
 			Scale = 1,
@@ -5352,8 +5356,7 @@ Components.Notification = (function()
 		end
 
 		function NewNotification:Open()
-			local ContentSize = NewNotification.LabelHolder.AbsoluteSize.Y
-			NewNotification.Holder.Size = UDim2.new(1, 0, 0, 58 + ContentSize)
+			Fit()
 
 			RootMotor:setGoal({
 				Scale = Spring(0, { frequency = 5 }),

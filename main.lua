@@ -5731,21 +5731,11 @@ Components.Window = (function()
 			return Services.Workspace.CurrentCamera.ViewportSize - topLeft
 		end
 
-		-- Giữ cửa sổ luôn nằm trọn trong màn hình
-		function Window.Clamp(X, Y)
-			local Screen = GetScreenSize()
-			return math.floor(math.max(0, math.min(X, Screen.X - Window.Size.X.Offset))),
-				math.floor(math.max(0, math.min(Y, Screen.Y - Window.Size.Y.Offset)))
-		end
-
-		-- Căn giữa lần đầu; nếu người dùng đã kéo thì giữ vị trí nhưng kẹp lại trong màn hình
-		local function PlaceWindow()
-			local Screen = GetScreenSize()
-			local X, Y = (Screen.X - Window.Size.X.Offset) / 2, (Screen.Y - Window.Size.Y.Offset) / 2
-			if Window.Moved then
-				X, Y = Window.Position.X.Offset, Window.Position.Y.Offset
-			end
-			Window.Position = UDim2.fromOffset(Window.Clamp(X, Y))
+		local function CenterWindow()
+			local vp = GetScreenSize()
+			local x = math.max(0, (vp.X - Window.Size.X.Offset) / 2)
+			local y = math.max(0, (vp.Y - Window.Size.Y.Offset) / 2)
+			Window.Position = UDim2.fromOffset(math.floor(x), math.floor(y))
 			if Window.Root then
 				Window.Root.Position = Window.Position
 			end
@@ -6415,9 +6405,9 @@ Components.Window = (function()
 			Parent = Config.Parent,
 		}, rootChildren)
 
-		PlaceWindow()
-		Creator.AddSignal(Services.Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"), PlaceWindow)
-		Creator.AddSignal(GUI:GetPropertyChangedSignal("AbsoluteSize"), PlaceWindow)
+		CenterWindow()
+		Creator.AddSignal(Services.Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"), CenterWindow)
+		Creator.AddSignal(GUI:GetPropertyChangedSignal("AbsoluteSize"), CenterWindow)
 
 
 		Window.TitleBar = Components.TitleBar({
@@ -6670,9 +6660,6 @@ Components.Window = (function()
 			Window.Size = UDim2.fromOffset(SizeX, SizeY)
 
 			if not NoPos then
-				if not Value then
-					Window.Position = UDim2.fromOffset(Window.Clamp(Window.Position.X.Offset, Window.Position.Y.Offset))
-				end
 				PosMotor:setGoal({
 					X = Spring(Value and 0 or Window.Position.X.Offset, { frequency = 6 }),
 					Y = Spring(Value and 0 or Window.Position.Y.Offset, { frequency = 6 }),
@@ -6726,15 +6713,15 @@ Components.Window = (function()
 		Creator.AddSignal(UserInputService.InputChanged, function(Input)
 			if Input == DragInput and Dragging then
 				local Delta = Input.Position - MousePos
-				if Window.Maximized then
-					Window.Maximize(false, true, true)
-				end
-				Window.Moved = true
-				Window.Position = UDim2.fromOffset(Window.Clamp(StartPos.X.Offset + Delta.X, StartPos.Y.Offset + Delta.Y))
+				Window.Position = UDim2.fromOffset(StartPos.X.Offset + Delta.X, StartPos.Y.Offset + Delta.Y)
 				PosMotor:setGoal({
 					X = Instant(Window.Position.X.Offset),
 					Y = Instant(Window.Position.Y.Offset),
 				})
+
+				if Window.Maximized then
+					Window.Maximize(false, true, true)
+				end
 			end
 
 			if
@@ -6745,11 +6732,8 @@ Components.Window = (function()
 				local StartSize = Window.Size
 
 				local TargetSize = Vector3.new(StartSize.X.Offset, StartSize.Y.Offset, 0) + Vector3.new(1, 1, 0) * Delta
-				local Screen = GetScreenSize()
-				local TargetSizeClamped = Vector2.new(
-					math.clamp(TargetSize.X, 470, math.max(470, math.min(2048, Screen.X - Window.Position.X.Offset))),
-					math.clamp(TargetSize.Y, 380, math.max(380, math.min(2048, Screen.Y - Window.Position.Y.Offset)))
-				)
+				local TargetSizeClamped =
+					Vector2.new(math.clamp(TargetSize.X, 470, 2048), math.clamp(TargetSize.Y, 380, 2048))
 
 				SizeMotor:setGoal({
 					X = Flipper.Instant.new(TargetSizeClamped.X),
@@ -11784,28 +11768,7 @@ function Library.MakeDraggable(Button, Target, Types, CanDrag)
 		return Target
 	end
 
-	function Drag.Clamp(Frame, X, Y)
-		local View, Size = GetParentSize(Frame), Frame.AbsoluteSize
-		return math.min(math.max(X, 0), View.X - Size.X), math.min(math.max(Y, 0), View.Y - Size.Y)
-	end
-
-	-- Đổi kích thước màn hình / xoay máy: đưa lại vào màn hình nếu đang bị trôi ra ngoài
-	function Drag.Fit()
-		local Frame = Drag.Frame()
-		if not (Frame and Frame.Parent) then
-			return
-		end
-		local Pos = GetPixelPosition(Frame)
-		local X, Y = Drag.Clamp(Frame, Pos.X.Offset, Pos.Y.Offset)
-		if X ~= Pos.X.Offset or Y ~= Pos.Y.Offset then
-			Frame.Position = UDim2.fromOffset(X, Y)
-		end
-	end
-
 	if CanDrag ~= false then
-		Creator.AddSignal(Services.Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"), Drag.Fit)
-		Creator.AddSignal(GUI:GetPropertyChangedSignal("AbsoluteSize"), Drag.Fit)
-
 		Creator.AddSignal(Button.InputBegan, function(Input)
 			if not Types[Input.UserInputType] then
 				return
@@ -11832,7 +11795,11 @@ function Library.MakeDraggable(Button, Target, Types, CanDrag)
 			if Delta.Magnitude > 6 then
 				Drag.Moved = true
 			end
-			Frame.Position = UDim2.fromOffset(Drag.Clamp(Frame, Drag.Origin.X.Offset + Delta.X, Drag.Origin.Y.Offset + Delta.Y))
+			local View, Size = GetParentSize(Frame), Frame.AbsoluteSize
+			Frame.Position = UDim2.fromOffset(
+				math.min(math.max(Drag.Origin.X.Offset + Delta.X, 0), View.X - Size.X),
+				math.min(math.max(Drag.Origin.Y.Offset + Delta.Y, 0), View.Y - Size.Y)
+			)
 		end)
 	end
 

@@ -5092,6 +5092,23 @@ Components.Dialog = (function()
 			local Button = Components.Button("", NewDialog.ButtonHolder, true)
 			Button.Title.Text = Title
 
+			if not Fancy and Style == "Danger" then
+				-- Giữ kiểu phẳng chuẩn của lib (giống nút Apply của Colorpicker), chỉ đổi màu nền sang đỏ
+				Creator.OverrideTag(Button.Frame, {})
+				Creator.OverrideTag(Button.Title, {})
+				Button.Frame.BackgroundColor3 = Color3.fromRGB(214, 78, 84)
+				Button.Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+				Button.Title.FontFace = Font.new(
+					"rbxasset://fonts/families/GothamSSm.json",
+					Enum.FontWeight.SemiBold,
+					Enum.FontStyle.Normal
+				)
+				local Stroke = Button.Frame:FindFirstChildOfClass("UIStroke")
+				if Stroke then
+					Stroke.Transparency = 1
+				end
+			end
+
 			for _, Btn in next, NewDialog.ButtonHolder:GetChildren() do
 				if Btn:IsA("TextButton") then
 					Btn.Size = UDim2.new(
@@ -7059,29 +7076,7 @@ Components.Window = (function()
 			Config.Content = Config.Content or Library.GetDesc(Config)
 
 			local Dialog = DialogModule:Create()
-			Dialog.Fancy = true
 			Dialog.Title.Text = Config.Title
-			Dialog.Root.UICorner.CornerRadius = UDim.new(0, 12)
-
-			Creator.OverrideTag(Dialog.Root, { BackgroundColor3 = "AcrylicMain" })
-			New("Frame", {
-				BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-				BackgroundTransparency = 0.1,
-				BorderSizePixel = 0,
-				Size = UDim2.fromScale(1, 1),
-				ZIndex = 0,
-				Parent = Dialog.Root,
-			}, {
-				New("UIGradient", {
-					Rotation = 90,
-					ThemeTag = { Color = "AcrylicGradient" },
-				}),
-			})
-			local RootStroke = Dialog.Root:FindFirstChildOfClass("UIStroke")
-			if RootStroke then
-				Creator.OverrideTag(RootStroke, { Color = "AcrylicBorder" })
-				RootStroke.Transparency = 0.35
-			end
 
 			local IconName = Config.Icon
 			local HasIcon = IconName ~= nil and IconName ~= ""
@@ -7095,17 +7090,9 @@ Components.Window = (function()
 			local MinH = HasIcon and 140 or 110
 			local FOOTER = 58
 
-			Dialog.Scale.Scale = 1
-			Dialog.ButtonHolderFrame.BackgroundTransparency = 1
-			for _, Child in next, Dialog.ButtonHolderFrame:GetChildren() do
-				if Child:IsA("Frame") and Child ~= Dialog.ButtonHolder then
-					Child.Visible = false
-				end
-			end
 			Dialog.ButtonHolderFrame.Size = UDim2.new(1, 0, 0, FOOTER)
 			Dialog.ButtonHolderFrame.Position = UDim2.new(0, 0, 1, -FOOTER)
-			Dialog.ButtonHolder.Size = UDim2.new(1, -32, 1, 0)
-			Dialog.ButtonHolder.UIListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+			Dialog.ButtonHolder.Size = UDim2.new(1, -32, 0, 32)
 			Dialog.ButtonHolder.UIListLayout.Padding = UDim.new(0, 8)
 
 			local function Tint(Props, Key)

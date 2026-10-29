@@ -3503,15 +3503,15 @@ function Acrylic.init()
 	local depthOfFieldDefaults = {}
 
 	function Acrylic.Enable()
-		for _, effect in pairs(depthOfFieldDefaults) do
-			effect.Enabled = false
+		for Object in pairs(depthOfFieldDefaults) do
+			Object.Enabled = false
 		end
 		baseEffect.Parent = Services.Lighting
 	end
 
 	function Acrylic.Disable()
-		for _, effect in pairs(depthOfFieldDefaults) do
-			effect.Enabled = effect.enabled
+		for Object, Default in pairs(depthOfFieldDefaults) do
+			Object.Enabled = Default.enabled
 		end
 		baseEffect.Parent = nil
 	end
@@ -6917,6 +6917,7 @@ Components.Window = (function()
 		function Window:Minimize()
 			Window.Minimized = not Window.Minimized
 			FadeTo(Window.Minimized and 1 or 0)
+			Library:SyncAcrylic()
 
 			for _, Option in next, Library.Options do
 				if Option and Option.Type == "Dropdown" and Option.Opened then
@@ -7166,16 +7167,6 @@ Components.Window = (function()
 			Dialog.Title.TextSize = HasIcon and 17 or 20
 			Dialog.Title.Position = HasIcon and UDim2.new(0, 0, 0, TitleY) or UDim2.fromOffset(PAD, TitleY)
 			Dialog.Title.Size = UDim2.new(1, HasIcon and 0 or -PAD * 2, 0, 24)
-
-			-- Đường kẻ dưới tiêu đề (dùng màu "Text" mờ nên hợp mọi theme)
-			New("Frame", {
-				Position = UDim2.new(0, 0, 0, ContentY - 8),
-				Size = UDim2.new(1, 0, 0, 1),
-				BackgroundTransparency = 0.88,
-				BorderSizePixel = 0,
-				Parent = Dialog.Root,
-				ThemeTag = { BackgroundColor3 = "Text" },
-			})
 
 			local ContentHolder = New("ScrollingFrame", {
 				BackgroundTransparency = 1,
@@ -12334,7 +12325,7 @@ function Library:Destroy()
 
 		if Library.UseAcrylic then
 
-
+			Library:SyncAcrylic()
 			Library.Window.AcrylicPaint.Model:Destroy()
 
 
@@ -12357,6 +12348,14 @@ end
 
 
 
+-- Chỉ bật DepthOfField toàn màn hình khi UI đang hiện + Acrylic bật; ẩn/tắt/unload thì gỡ ra
+function Library:SyncAcrylic()
+	if Acrylic.Enable then
+		local On = Library.UseAcrylic and Library.Acrylic and Library.Window and not Library.Window.Minimized and not Library.Unloaded
+		Acrylic[On and "Enable" or "Disable"]()
+	end
+end
+
 function Library:ToggleAcrylic(Value)
 
 
@@ -12367,6 +12366,7 @@ function Library:ToggleAcrylic(Value)
 
 
 			Library.Acrylic = Value
+			Library:SyncAcrylic()
 
 
 			if Library.Window.AcrylicPaint and Library.Window.AcrylicPaint.Model then

@@ -5274,8 +5274,7 @@ Components.Notification = (function()
 			AnchorPoint = Vector2.new(1, 0),
 			BackgroundTransparency = 1,
 		}, {
-			New("ImageLabel", {
-				Image = Components.Close,
+			Library:IconLabel("x", {
 				Size = UDim2.fromOffset(16, 16),
 				Position = UDim2.fromScale(0.5, 0.5),
 				AnchorPoint = Vector2.new(0.5, 0.5),
@@ -5288,7 +5287,8 @@ Components.Notification = (function()
 
 		NewNotification.Icon = HasIcon and Library:IconLabel(Config.Icon, {
 			Size = UDim2.fromOffset(ICON, ICON),
-			Position = UDim2.fromOffset(PAD, PAD),
+			AnchorPoint = Vector2.new(0, 0.5),
+			Position = UDim2.new(0, PAD, 0.5, 0),
 			BackgroundTransparency = 1,
 			ImageColor3 = Config.IconColor,
 			ThemeTag = not Config.IconColor and { ImageColor3 = "Text" } or nil,

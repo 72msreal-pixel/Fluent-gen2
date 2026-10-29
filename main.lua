@@ -5634,9 +5634,7 @@ Components.TitleBar = (function()
 		})
 		TitleBar.CloseButton = BarButton(Components.Assets.Close, UDim2.new(1, -4, 0, 4), TitleBar.Frame, function()
 			Library.Window:Dialog({
-				Title = "Close",
-				Icon = "power",
-				Type = "Danger",
+				Title = "Close window",
 				Content = "Are you sure you want to unload the interface?",
 				Buttons = {
 					{
@@ -7010,8 +7008,8 @@ Components.Window = (function()
 
 			local PAD = HasIcon and 24 or 20
 			local Align = HasIcon and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left
-			local TitleY = HasIcon and 64 or 25
-			local ContentY = HasIcon and 92 or 60
+			local TitleY = HasIcon and 64 or 20
+			local ContentY = HasIcon and 92 or 54
 			local FOOTER = 62
 
 			Dialog.ButtonHolderFrame.Size = UDim2.new(1, 0, 0, FOOTER)
@@ -7100,9 +7098,9 @@ Components.Window = (function()
 			end
 
 			Dialog.Title.TextXAlignment = Align
-			Dialog.Title.TextSize = HasIcon and 17 or 22
-			Dialog.Title.Position = HasIcon and UDim2.new(0, 0, 0, TitleY) or UDim2.fromOffset(20, TitleY)
-			Dialog.Title.Size = UDim2.new(1, HasIcon and 0 or -40, 0, 22)
+			Dialog.Title.TextSize = HasIcon and 17 or 20
+			Dialog.Title.Position = HasIcon and UDim2.new(0, 0, 0, TitleY) or UDim2.fromOffset(PAD, TitleY)
+			Dialog.Title.Size = UDim2.new(1, HasIcon and 0 or -PAD * 2, 0, 24)
 
 			local ContentHolder = New("ScrollingFrame", {
 				BackgroundTransparency = 1,

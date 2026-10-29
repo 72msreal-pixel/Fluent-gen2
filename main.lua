@@ -765,7 +765,7 @@ local Themes = {
 }
 
 local Library = {
-	Version = "1.5.6",
+	Version = "1.5.8",
 
 	OpenFrames = {},
 	Options = {},
@@ -3524,7 +3524,7 @@ local Components = {
 	Assets = {
 		Close = "x",
 		Min = "minus",
-		Max = "square",
+		Max = "rbxassetid://9886659406",
 		Restore = "rbxassetid://9886659001",
 	},
 }

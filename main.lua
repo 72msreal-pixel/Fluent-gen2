@@ -8,30 +8,31 @@ ___________.__                        __      ________               ________
      \/                     \/     \/               \/     \/     \/         \/
 ]])
 
-local Lighting = game:GetService("Lighting")
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-local Stats = game:GetService("Stats")
+local cloneref = cloneref or function(Object) return Object end
+
+-- Mỗi service chỉ được lấy 1 lần (cache), dùng Services.X ở mọi nơi
+local Services = setmetatable({}, {
+	__index = function(self, Name)
+		local Service = cloneref(game:GetService(Name))
+		rawset(self, Name, Service)
+		return Service
+	end,
+})
+
+local Players = Services.Players
+local RunService = Services.RunService
+local UserInputService = Services.UserInputService
+local TweenService = Services.TweenService
+local TextService = Services.TextService
+local httpService = Services.HttpService
 local LocalPlayer = Players.LocalPlayer
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local GuiService = game:GetService("GuiService")
-local TextService = game:GetService("TextService")
-local Camera = game:GetService("Workspace").CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
-local httpService = game:GetService("HttpService")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 
 local Mobile = not RunService:IsStudio() and table.find({Enum.Platform.IOS, Enum.Platform.Android}, UserInputService:GetPlatform()) ~= nil
 
-local fischbypass
+local fischbypass = game.GameId == 5750914919
 
-if game.GameId == 5750914919 then
-	fischbypass = true
-end
-
-local RenderStepped = RunService.RenderStepped
+local ProtectGui = protectgui or (syn and syn.protect_gui) or function() end
 
 local ProtectGui = protectgui or (syn and syn.protect_gui) or function() end
 
@@ -3141,16 +3142,83 @@ end
 
 Library.Creator = Creator
 
+-- Desc là tên ngắn của Description (dùng chung cho mọi thành phần)
+function Library.GetDesc(Config)
+	return Config.Description or Config.Desc
+end
+
 Library.MiniMessageToRichText = MiniMessageToRichText
 
 local New = Creator.New
 
-local GUI = New("ScreenGui", {
-	Parent = LocalPlayer:WaitForChild("PlayerGui"),
-})
-pcall(function() GUI.AutoLocalize = false end)
+-- ===== CORE UI =====
+-- Gắn UI vào gethui()/CoreGui (game không với tới), tên ngẫu nhiên,
+-- khoá các thuộc tính quan trọng để game không tắt/di chuyển/đổi thứ tự UI.
+local Core = { State = {} }
+Library.Core = Core
+
+Core.Parent = (function()
+	if gethui then
+		local Ok, Hui = pcall(gethui)
+		if Ok and typeof(Hui) == "Instance" then
+			return Hui
+		end
+	end
+	if pcall(function()
+		local Probe = Instance.new("ScreenGui")
+		Probe.Parent = Services.CoreGui
+		Probe:Destroy()
+	end) then
+		return Services.CoreGui
+	end
+	return LocalPlayer:WaitForChild("PlayerGui")
+end)()
+
+function Core.Create(Props)
+	Props = Props or {}
+	Props.Name = Props.Name or httpService:GenerateGUID(false)
+	Props.ResetOnSpawn = false
+	Props.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+	local Gui = New("ScreenGui", Props)
+	pcall(function() Gui.AutoLocalize = false end)
+	ProtectGui(Gui)
+	Gui.Parent = Core.Parent
+
+	Core.State[Gui] = {
+		Parent = Core.Parent,
+		Enabled = true,
+		ResetOnSpawn = false,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		DisplayOrder = Gui.DisplayOrder,
+	}
+
+	for Property in next, Core.State[Gui] do
+		Creator.AddSignal(Gui:GetPropertyChangedSignal(Property), function()
+			local Wanted = Core.State[Gui] and Core.State[Gui][Property]
+			if Wanted ~= nil and Gui[Property] ~= Wanted then
+				task.defer(pcall, function() Gui[Property] = Wanted end)
+			end
+		end)
+	end
+
+	return Gui
+end
+
+function Core.SetOrder(Gui, Order)
+	if Core.State[Gui] then
+		Core.State[Gui].DisplayOrder = Order
+	end
+	Gui.DisplayOrder = Order
+end
+
+function Core.Destroy(Gui)
+	Core.State[Gui] = nil
+	Gui:Destroy()
+end
+
+local GUI = Core.Create()
 Library.GUI = GUI
-ProtectGui(GUI)
 
 function Library:SafeCallback(Function, ...)
 	if not Function then
@@ -3191,12 +3259,12 @@ local function map(value, inMin, inMax, outMin, outMax)
 end
 
 local function viewportPointToWorld(location, distance)
-	local unitRay = game:GetService("Workspace").CurrentCamera:ScreenPointToRay(location.X, location.Y)
+	local unitRay = Services.Workspace.CurrentCamera:ScreenPointToRay(location.X, location.Y)
 	return unitRay.Origin + unitRay.Direction * distance
 end
 
 local function getOffset()
-	local viewportSizeY = game:GetService("Workspace").CurrentCamera.ViewportSize.Y
+	local viewportSizeY = Services.Workspace.CurrentCamera.ViewportSize.Y
 	return map(viewportSizeY, 0, 2560, 8, 56)
 end
 
@@ -3205,7 +3273,7 @@ local viewportPointToWorld, getOffset = unpack({ viewportPointToWorld, getOffset
 local BlurFolder = Instance.new("Folder")
 BlurFolder.Name = "FluentBlur"
 do
-	local ws = game:GetService("Workspace")
+	local ws = Services.Workspace
 	local function attachToCurrentCamera()
 		local cam = ws.CurrentCamera
 		if cam and BlurFolder.Parent ~= cam then
@@ -3258,7 +3326,7 @@ function AcrylicBlur()
 		end
 
 		local function render()
-			local res = game:GetService("Workspace").CurrentCamera
+			local res = Services.Workspace.CurrentCamera
 			if res then
 				res = res.CFrame
 			end
@@ -3293,7 +3361,7 @@ function AcrylicBlur()
 		end
 
 		local function renderOnChange()
-			local camera = game:GetService("Workspace").CurrentCamera
+			local camera = Services.Workspace.CurrentCamera
 			if not camera then
 				return
 			end
@@ -3351,7 +3419,6 @@ function AcrylicBlur()
 end
 
 function AcrylicPaint()
-	local New = Creator.New
 	local AcrylicBlur = AcrylicBlur()
 
 	return function(props)
@@ -3488,7 +3555,7 @@ function Acrylic.init()
 		for _, effect in pairs(depthOfFieldDefaults) do
 			effect.Enabled = false
 		end
-		baseEffect.Parent = game:GetService("Lighting")
+		baseEffect.Parent = Services.Lighting
 	end
 
 	function Acrylic.Disable()
@@ -3505,12 +3572,12 @@ function Acrylic.init()
 			end
 		end
 
-		for _, child in pairs(game:GetService("Lighting"):GetChildren()) do
+		for _, child in pairs(Services.Lighting:GetChildren()) do
 			register(child)
 		end
 
-		if game:GetService("Workspace").CurrentCamera then
-			for _, child in pairs(game:GetService("Workspace").CurrentCamera:GetChildren()) do
+		if Services.Workspace.CurrentCamera then
+			for _, child in pairs(Services.Workspace.CurrentCamera:GetChildren()) do
 				register(child)
 			end
 		end
@@ -3530,7 +3597,6 @@ local Components = {
 }
 
 Components.Element = (function()
-	local New = Creator.New
 
 	local Spring = Flipper.Spring.new
 
@@ -3799,7 +3865,6 @@ Components.Element = (function()
 	end
 end)()
 Components.Section = (function()
-	local New = Creator.New
 
 	local function ResolveWeight(W)
 		if typeof(W) == "EnumItem" then
@@ -3830,7 +3895,7 @@ Components.Section = (function()
 		local Collapsed = Config.Opened == false
 		local CurrentTween = nil
 
-		local Desc = Collapsible and (Config.Description or Config.Desc)
+		local Desc = Collapsible and Library.GetDesc(Config)
 		local HasDesc = type(Desc) == "string" and Desc ~= ""
 		local DESC_H = HasDesc and 16 or 0
 
@@ -4057,7 +4122,6 @@ Components.Section = (function()
 	end
 end)()
 Components.Tab = (function()
-	local New = Creator.New
 	local Spring = Flipper.Spring.new
 	local Instant = Flipper.Instant.new
 	local Components = Components
@@ -4265,7 +4329,7 @@ Components.Tab = (function()
 				TextXAlignment = Config.TextXAlignment,
 				TextSize = Config.TextSize,
 				Opened = Config.Opened,
-				Description = Config.Description or Config.Desc,
+				Description = Library.GetDesc(Config),
 			}, Owner.Container)
 
 			if not SectionFrame.Container then
@@ -4824,7 +4888,6 @@ Components.Tab = (function()
 	return TabModule
 end)()
 Components.Button = (function()
-	local New = Creator.New
 
 	local Spring = Flipper.Spring.new
 
@@ -4900,7 +4963,6 @@ end)()
 Components.Dialog = (function()
 	local Spring = Flipper.Spring.new
 	local Instant = Flipper.Instant.new
-	local New = Creator.New
 
 	local Dialog = {
 		Window = nil,
@@ -5147,7 +5209,6 @@ end)()
 Components.Notification = (function()
 	local Spring = Flipper.Spring.new
 	local Instant = Flipper.Instant.new
-	local New = Creator.New
 
 	local Notification = {}
 
@@ -5172,7 +5233,7 @@ Components.Notification = (function()
 
 	function Notification:New(Config)
 		Config.Title = Config.Title or "Title"
-		Config.Content = Config.Content or "Content"
+		Config.Content = Config.Content or Library.GetDesc(Config) or "Content"
 		Config.SubContent = Config.SubContent or ""
 		Config.Duration = Config.Duration or nil
 		local NewNotification = {
@@ -5181,8 +5242,11 @@ Components.Notification = (function()
 
 		NewNotification.AcrylicPaint = Acrylic.AcrylicPaint()
 
+		local HasIcon = Config.Icon ~= nil and Config.Icon ~= ""
+		local TextX = HasIcon and 38 or 14
+
 		NewNotification.Title = New("TextLabel", {
-			Position = UDim2.new(0, 14, 0, 17),
+			Position = UDim2.new(0, TextX, 0, 17),
 			Text = Config.Title,
 			RichText = true,
 			TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -5191,7 +5255,7 @@ Components.Notification = (function()
 			TextSize = 13,
 			TextXAlignment = "Left",
 			TextYAlignment = "Center",
-			Size = UDim2.new(1, -12, 0, 12),
+			Size = UDim2.new(1, -(TextX - 2), 0, 12),
 			TextWrapped = true,
 			BackgroundTransparency = 1,
 			ThemeTag = {
@@ -5266,6 +5330,14 @@ Components.Notification = (function()
 			}),
 		})
 
+		NewNotification.Icon = HasIcon and Library:IconLabel(Config.Icon, {
+			Size = UDim2.fromOffset(18, 18),
+			Position = UDim2.fromOffset(14, 14),
+			BackgroundTransparency = 1,
+			ImageColor3 = Config.IconColor,
+			ThemeTag = not Config.IconColor and { ImageColor3 = "Text" } or nil,
+		}) or nil
+
 		NewNotification.Root = New("Frame", {
 			BackgroundTransparency = 1,
 			Size = UDim2.new(1, 0, 1, 0),
@@ -5275,6 +5347,7 @@ Components.Notification = (function()
 			NewNotification.Title,
 			NewNotification.CloseButton,
 			NewNotification.LabelHolder,
+			NewNotification.Icon,
 		})
 
 		if Config.Content == "" then
@@ -5382,7 +5455,6 @@ Components.Notification = (function()
 	return Notification
 end)()
 Components.Textbox = (function()
-	local New = Creator.New
 
 	return function(Parent, Acrylic)
 		Acrylic = Acrylic or false
@@ -5500,7 +5572,6 @@ Components.Textbox = (function()
 	end
 end)()
 Components.TitleBar = (function()
-	local New = Creator.New
 	local AddSignal = Creator.AddSignal
 
 	local function parseColor(value)
@@ -5681,7 +5752,6 @@ end)()
 Components.Window = (function()
 	local Spring = Flipper.Spring.new
 	local Instant = Flipper.Instant.new
-	local New = Creator.New
 
 	return function(Config)
 		local Window = {
@@ -5707,8 +5777,8 @@ Components.Window = (function()
 			if size.X > 0 and size.Y > 0 then
 				return size
 			end
-			local topLeft = GuiService:GetGuiInset()
-			return Camera.ViewportSize - topLeft
+			local topLeft = Services.GuiService:GetGuiInset()
+			return Services.Workspace.CurrentCamera.ViewportSize - topLeft
 		end
 
 		local function CenterWindow()
@@ -6386,7 +6456,7 @@ Components.Window = (function()
 		}, rootChildren)
 
 		CenterWindow()
-		Creator.AddSignal(Camera:GetPropertyChangedSignal("ViewportSize"), CenterWindow)
+		Creator.AddSignal(Services.Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"), CenterWindow)
 		Creator.AddSignal(GUI:GetPropertyChangedSignal("AbsoluteSize"), CenterWindow)
 
 
@@ -6447,7 +6517,6 @@ Components.Window = (function()
 			})
 
 			pcall(function()
-				local Players = game:GetService("Players")
 				local content, isReady = Players:GetUserThumbnailAsync(Players.LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
 				if isReady and content then
 					Avatar.Image = content
@@ -7011,8 +7080,7 @@ Components.Window = (function()
 
 		local DialogModule = Components.Dialog:Init(Window)
 		function Window:Dialog(Config)
-			local TweenService = game:GetService("TweenService")
-			local TextService = game:GetService("TextService")
+			Config.Content = Config.Content or Library.GetDesc(Config)
 
 			local Dialog = DialogModule:Create()
 			Dialog.Fancy = true
@@ -7231,7 +7299,7 @@ ElementsTable.Button = (function()
 		assert(Config.Title, "Button - Missing Title")
 		Config.Callback = Config.Callback or function() end
 
-		local ButtonFrame = Components.Element(Config.Title, Config.Description, self.Container, true, Config)
+		local ButtonFrame = Components.Element(Config.Title, Library.GetDesc(Config), self.Container, true, Config)
 
 		local ButtonIco = Library:IconLabel("chevron-right", {
 			Size = UDim2.fromOffset(16, 16),
@@ -7267,7 +7335,7 @@ ElementsTable.Toggle = (function()
 			Type = "Toggle",
 		}
 
-		local ToggleFrame = Components.Element(Config.Title, Config.Description, self.Container, true, Config)
+		local ToggleFrame = Components.Element(Config.Title, Library.GetDesc(Config), self.Container, true, Config)
 		ToggleFrame.DescLabel.Size = UDim2.new(1, -54, 0, 14)
 
 		Toggle.SetTitle = ToggleFrame.SetTitle
@@ -7358,7 +7426,6 @@ ElementsTable.Dropdown = (function()
 	local Element = {}
 	Element.__index = Element
 	Element.__type = "Dropdown"
-	local New = Creator.New
 
 	function Element:New(Idx, Config)
 
@@ -7392,7 +7459,7 @@ ElementsTable.Dropdown = (function()
 			Dropdown.Value = {}
 		end
 
-		local DropdownFrame = Components.Element(Config.Title, Config.Description, self.Container, false, Config)
+		local DropdownFrame = Components.Element(Config.Title, Library.GetDesc(Config), self.Container, false, Config)
 		DropdownFrame.DescLabel.Size = UDim2.new(1, -170, 0, 14)
 
 		Dropdown.SetTitle = DropdownFrame.SetTitle
@@ -7639,8 +7706,8 @@ ElementsTable.Dropdown = (function()
 			local dropdownHeight = DropdownInner.AbsoluteSize.Y
 			local canvasWidth = DropdownHolderCanvas.AbsoluteSize.X
 			local canvasHeight = DropdownHolderCanvas.AbsoluteSize.Y
-			local viewportHeight = Camera.ViewportSize.Y
-			local viewportWidth = Camera.ViewportSize.X
+			local viewportHeight = Services.Workspace.CurrentCamera.ViewportSize.Y
+			local viewportWidth = Services.Workspace.CurrentCamera.ViewportSize.X
 			
 			if not windowRoot then
 				if Library.Window and Library.Window.Root then
@@ -8241,7 +8308,7 @@ ElementsTable.Paragraph = (function()
 	function Paragraph:New(Config)
 		Config.Content = Config.Content or ""
 
-		local Paragraph = Components.Element(Config.Title, Config.Content, Paragraph.Container, false, Config)
+		local Paragraph = Components.Element(Config.Title, Config.Content or Library.GetDesc(Config), Paragraph.Container, false, Config)
 		Paragraph.Frame.BackgroundTransparency = 0.92
 		Paragraph.Border.Transparency = 0.6
 
@@ -8280,7 +8347,7 @@ ElementsTable.Slider = (function()
 		local DragInput = nil
 		local ScrollFrame = self.ScrollFrame
 
-		local SliderFrame = Components.Element(Config.Title, Config.Description, self.Container, false, Config)
+		local SliderFrame = Components.Element(Config.Title, Library.GetDesc(Config), self.Container, false, Config)
 		SliderFrame.DescLabel.Size = UDim2.new(1, -170, 0, 14)
 
 		Slider.Elements = SliderFrame
@@ -8409,7 +8476,7 @@ ElementsTable.Slider = (function()
 			if cached then
 				return cached
 			end
-			local textSize = game:GetService("TextService"):GetTextSize(
+			local textSize = Services.TextService:GetTextSize(
 				string.rep("0", math.max(length, 1)),
 				12,
 				Enum.Font.SourceSans,
@@ -8716,7 +8783,7 @@ ElementsTable.Keybind = (function()
 
 		local Picking = false
 
-		local KeybindFrame = Components.Element(Config.Title, Config.Description, self.Container, true)
+		local KeybindFrame = Components.Element(Config.Title, Library.GetDesc(Config), self.Container, true)
 
 		Keybind.SetTitle = KeybindFrame.SetTitle
 		Keybind.SetDesc = KeybindFrame.SetDesc
@@ -8923,7 +8990,7 @@ ElementsTable.Colorpicker = (function()
 
 		Colorpicker:SetHSVFromRGB(Colorpicker.Value)
 
-		local ColorpickerFrame = Components.Element(Config.Title, Config.Description, self.Container, true)
+		local ColorpickerFrame = Components.Element(Config.Title, Library.GetDesc(Config), self.Container, true)
 
 		Colorpicker.SetTitle = ColorpickerFrame.SetTitle
 		Colorpicker.SetDesc = ColorpickerFrame.SetDesc
@@ -9527,7 +9594,7 @@ ElementsTable.Input = (function()
 			Type = "Input",
 		}
 
-		local InputFrame = Components.Element(Config.Title, Config.Description, self.Container, false)
+		local InputFrame = Components.Element(Config.Title, Library.GetDesc(Config), self.Container, false)
 
 		Input.SetTitle = InputFrame.SetTitle
 		Input.SetDesc = InputFrame.SetDesc
@@ -9594,7 +9661,6 @@ end)()
 local NotificationModule = Components.Notification
 NotificationModule:Init(GUI)
 
-local New = Creator.New
 
 local IconsLib
 do
@@ -9864,7 +9930,7 @@ StatusBar.Items = {
 	{ Icon = "wifi", Sample = function() return "999MS+" end, Get = function()
 		local Ok, Ping = pcall(function() return LocalPlayer:GetNetworkPing() * 1000 end)
 		if not Ok or not Ping or Ping <= 0 then
-			Ok, Ping = pcall(function() return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() end)
+			Ok, Ping = pcall(function() return Services.Stats.Network.ServerStatsItem["Data Ping"]:GetValue() end)
 		end
 		local Value = Ok and Ping and math.floor(Ping + 0.5) or 0
 		if Value > 999 then return "999MS+" end
@@ -9894,17 +9960,14 @@ function StatusBar.Text(Props)
 end
 
 function StatusBar.Build(Config)
-	StatusBar.Gui = Creator.New("ScreenGui", {
+	StatusBar.Gui = Core.Create({
 		Name = "FluentStatusBar",
 		IgnoreGuiInset = true,
 		DisplayOrder = 1001,
-		ResetOnSpawn = false,
-		Parent = LocalPlayer:WaitForChild("PlayerGui"),
 	})
-	ProtectGui(StatusBar.Gui)
 
 	local function DefaultPosition()
-		local Inset = GuiService:GetGuiInset().Y
+		local Inset = Services.GuiService:GetGuiInset().Y
 		local CenterY = (Inset >= 50) and (Inset - 24) or (Inset / 2)
 		return UDim2.new(1, -12, 0, CenterY)
 	end
@@ -11743,8 +11806,69 @@ local function GetPointerPosition(Input)
 	if Input and Input.UserInputType == Enum.UserInputType.Touch then
 		return Vector2.new(Input.Position.X, Input.Position.Y)
 	end
-	local Mouse = game:GetService("Players").LocalPlayer:GetMouse()
 	return Vector2.new(Mouse.X, Mouse.Y)
+end
+
+Library.PointerTypes = {
+	[Enum.UserInputType.MouseButton1] = true,
+	[Enum.UserInputType.Touch] = true,
+}
+
+-- Kéo + bấm-để-thu-nhỏ dùng chung (Target là Frame hoặc function trả về Frame)
+function Library.MakeDraggable(Button, Target, Types, CanDrag)
+	local Drag = { Active = false, Moved = false }
+	Types = Types or Library.PointerTypes
+
+	function Drag.Frame()
+		if type(Target) == "function" then
+			return Target()
+		end
+		return Target
+	end
+
+	if CanDrag ~= false then
+		Creator.AddSignal(Button.InputBegan, function(Input)
+			if not Types[Input.UserInputType] then
+				return
+			end
+			Drag.Active, Drag.Moved, Drag.Input = true, false, Input
+			Drag.Start = GetPointerPosition(Input)
+			Drag.Origin = GetPixelPosition(Drag.Frame())
+
+			local Connection
+			Connection = Input.Changed:Connect(function()
+				if Input.UserInputState == Enum.UserInputState.End then
+					Drag.Active, Drag.Start, Drag.Origin, Drag.Input = false, nil, nil, nil
+					Connection:Disconnect()
+				end
+			end)
+		end)
+
+		Creator.AddSignal(RunService.Heartbeat, function()
+			local Frame = Drag.Active and Drag.Start and Drag.Origin and Drag.Frame()
+			if not (Frame and Frame.Parent) then
+				return
+			end
+			local Delta = GetPointerPosition(Drag.Input) - Drag.Start
+			if Delta.Magnitude > 6 then
+				Drag.Moved = true
+			end
+			local View, Size = GetParentSize(Frame), Frame.AbsoluteSize
+			Frame.Position = UDim2.fromOffset(
+				math.min(math.max(Drag.Origin.X.Offset + Delta.X, 0), View.X - Size.X),
+				math.min(math.max(Drag.Origin.Y.Offset + Delta.Y, 0), View.Y - Size.Y)
+			)
+		end)
+	end
+
+	Creator.AddSignal(Button.MouseButton1Click, function()
+		task.wait(0.1)
+		if not Drag.Active and not Drag.Moved and Library.Window then
+			Library.Window:Minimize()
+		end
+	end)
+
+	return Drag
 end
 
 function Library:CreateMinimizer(Config)
@@ -11768,7 +11892,7 @@ function Library:CreateMinimizer(Config)
 	local parentGui = Library.GUI or GUI
 
 
-	if parentGui then parentGui.DisplayOrder = 1000 end
+	if parentGui then Core.SetOrder(parentGui, 1000) end
 
 
 	local isMobile = Mobile and true or false
@@ -12071,132 +12195,7 @@ function Library:CreateMinimizer(Config)
 	if button then
 
 
-		local isDragging = false
-
-
-		local dragStart, dragOffset, dragInput, didDrag
-		if draggableWhole then
-
-
-			Creator.AddSignal(button.InputBegan, function(Input)
-
-
-				if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
-
-
-					isDragging = true
-
-
-					dragInput = Input
-					didDrag = false
-					dragStart = GetPointerPosition(Input)
-
-
-					dragOffset = GetPixelPosition(holder)
-
-
-					local conn
-
-
-					conn = Input.Changed:Connect(function()
-
-
-						if Input.UserInputState == Enum.UserInputState.End then
-
-
-							isDragging = false
-
-
-							dragStart = nil
-
-
-							dragOffset = nil
-
-
-							dragInput = nil
-							conn:Disconnect()
-
-
-						end
-
-
-					end)
-
-
-				end
-
-
-			end)
-
-
-
-
-
-			Creator.AddSignal(RunService.Heartbeat, function()
-
-
-				if isDragging and dragStart and dragOffset and holder and holder.Parent then
-
-
-					local delta = GetPointerPosition(dragInput) - dragStart
-					if delta.Magnitude > 6 then didDrag = true end
-
-
-					local newX = dragOffset.X.Offset + delta.X
-
-
-					local newY = dragOffset.Y.Offset + delta.Y
-
-
-					local viewport = GetParentSize(holder)
-
-
-					local size = holder.AbsoluteSize
-
-
-					if newX < 0 then newX = 0 end
-
-
-					if newY < 0 then newY = 0 end
-
-
-					if newX > viewport.X - size.X then newX = viewport.X - size.X end
-
-
-					if newY > viewport.Y - size.Y then newY = viewport.Y - size.Y end
-
-
-					holder.Position = UDim2.new(0, newX, 0, newY)
-
-
-				end
-
-
-			end)
-
-
-		end
-
-
-
-
-
-		AddSignal(button.MouseButton1Click, function()
-
-
-			task.wait(0.1)
-
-
-			if not isDragging and not didDrag and Library.Window then
-
-
-				Library.Window:Minimize()
-
-
-			end
-
-
-		end)
+		Library.MakeDraggable(button, holder, nil, draggableWhole)
 
 
 	end
@@ -12368,8 +12367,8 @@ function Library:Destroy()
 		Creator.Disconnect()
 
 
-		Library.GUI:Destroy()
-		if StatusBar.Gui then StatusBar.Gui:Destroy() StatusBar.Gui, StatusBar.Frame = nil, nil end
+		Core.Destroy(Library.GUI)
+		if StatusBar.Gui then Core.Destroy(StatusBar.Gui) StatusBar.Gui, StatusBar.Frame = nil, nil end
 
 
 	end
@@ -12891,246 +12890,11 @@ local MobileMinimizeButton = New("TextButton", {
 
 
 
-local Minimizer
-
-
-
-
-
-local isDragging = false
-
-
-local dragStart = nil
-
-
-local dragOffset = nil
-local dragInput = nil
-local didDrag = false
-
-Creator.AddSignal(MinimizeButton.InputBegan, function(Input)
-
-
-	if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-
-
-		isDragging = true
-
-
-		dragInput = Input
-		didDrag = false
-		dragStart = GetPointerPosition(Input)
-
-
-		dragOffset = GetPixelPosition(Library.Minimizer or Minimizer)
-
-
-
-
-
-		local connection
-
-
-		connection = Input.Changed:Connect(function()
-
-
-			if Input.UserInputState == Enum.UserInputState.End then
-
-
-				isDragging = false
-
-
-				dragStart = nil
-
-
-				dragOffset = nil
-
-
-				dragInput = nil
-				connection:Disconnect()
-
-
-			end
-
-
-		end)
-
-
-	end
-
-
-end)
-
-
-
-
-
-Creator.AddSignal(MobileMinimizeButton.InputBegan, function(Input)
-
-
-	if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
-
-
-		isDragging = true
-
-
-		dragInput = Input
-		didDrag = false
-		dragStart = GetPointerPosition(Input)
-
-
-		dragOffset = GetPixelPosition(Library.Minimizer or Minimizer)
-
-
-		local connection
-
-
-		connection = Input.Changed:Connect(function()
-
-
-			if Input.UserInputState == Enum.UserInputState.End then
-
-
-				isDragging = false
-
-
-				dragStart = nil
-
-
-				dragOffset = nil
-
-
-				dragInput = nil
-				connection:Disconnect()
-
-
-			end
-
-
-		end)
-
-
-	end
-
-
-end)
-
-
-
-
-
-local debugCount = 0
-
-
-Creator.AddSignal(RunService.Heartbeat, function()
-
-
-	local activeMin = Library.Minimizer or Minimizer
-
-
-	if isDragging and dragStart and dragOffset and activeMin and activeMin.Parent then
-
-
-		debugCount = debugCount + 1
-
-
-		if debugCount % 30 == 1 then
-
-
-		end
-
-
-		local delta = GetPointerPosition(dragInput) - dragStart
-		if delta.Magnitude > 6 then didDrag = true end
-
-
-		local newX = dragOffset.X.Offset + delta.X
-
-
-		local newY = dragOffset.Y.Offset + delta.Y
-
-
-		local viewportSize = GetParentSize(activeMin)
-
-
-		local minimizerSize = activeMin.AbsoluteSize
-
-
-
-
-
-		if newX < 0 then newX = 0 end
-
-
-		if newY < 0 then newY = 0 end
-
-
-		if newX > viewportSize.X - minimizerSize.X then
-
-
-			newX = viewportSize.X - minimizerSize.X
-
-
-		end
-
-
-		if newY > viewportSize.Y - minimizerSize.Y then
-
-
-			newY = viewportSize.Y - minimizerSize.Y
-
-
-		end
-
-
-		activeMin.Position = UDim2.new(0, newX, 0, newY)
-
-
-	end
-
-
-end)
-
-
-
-
-
-AddSignal(MinimizeButton.MouseButton1Click, function()
-
-
-	task.wait(0.1)
-
-
-	if not isDragging and not didDrag then
-
-
-		Library.Window:Minimize()
-
-
-	end
-
-
-end)
-
-
-
-
-
-AddSignal(MobileMinimizeButton.MouseButton1Click, function()
-
-
-	task.wait(0.1)
-
-
-	if not isDragging and not didDrag then
-
-
-		Library.Window:Minimize()
-
-
-	end
-
-
-end)
+Library.MakeDraggable(MinimizeButton, function() return Library.Minimizer end, {
+	[Enum.UserInputType.MouseButton1] = true,
+})
+
+Library.MakeDraggable(MobileMinimizeButton, function() return Library.Minimizer end)
 
     
 

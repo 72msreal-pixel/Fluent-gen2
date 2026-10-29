@@ -10,7 +10,6 @@ ___________.__                        __      ________               ________
 
 local cloneref = cloneref or function(Object) return Object end
 
--- Mỗi service chỉ được lấy 1 lần (cache), dùng Services.X ở mọi nơi
 local Services = setmetatable({}, {
 	__index = function(self, Name)
 		local Service = cloneref(game:GetService(Name))
@@ -3142,7 +3141,6 @@ end
 
 Library.Creator = Creator
 
--- Desc là tên ngắn của Description (dùng chung cho mọi thành phần)
 function Library.GetDesc(Config)
 	return Config.Description or Config.Desc
 end
@@ -3151,10 +3149,7 @@ Library.MiniMessageToRichText = MiniMessageToRichText
 
 local New = Creator.New
 
--- ===== CORE UI =====
--- Gắn UI vào gethui()/CoreGui (game không với tới), tên ngẫu nhiên,
--- khoá các thuộc tính quan trọng để game không tắt/di chuyển/đổi thứ tự UI.
-local Core = { State = {} }
+local Core = {}
 Library.Core = Core
 
 Core.Parent = gethui and gethui() or Services.CoreGui
@@ -3169,37 +3164,7 @@ function Core.Create(Props)
 	pcall(function() Gui.AutoLocalize = false end)
 	ProtectGui(Gui)
 	Gui.Parent = Core.Parent
-
-	Core.State[Gui] = {
-		Parent = Core.Parent,
-		Enabled = true,
-		ResetOnSpawn = false,
-		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-		DisplayOrder = Gui.DisplayOrder,
-	}
-
-	for Property in next, Core.State[Gui] do
-		Creator.AddSignal(Gui:GetPropertyChangedSignal(Property), function()
-			local Wanted = Core.State[Gui] and Core.State[Gui][Property]
-			if Wanted ~= nil and Gui[Property] ~= Wanted then
-				task.defer(pcall, function() Gui[Property] = Wanted end)
-			end
-		end)
-	end
-
 	return Gui
-end
-
-function Core.SetOrder(Gui, Order)
-	if Core.State[Gui] then
-		Core.State[Gui].DisplayOrder = Order
-	end
-	Gui.DisplayOrder = Order
-end
-
-function Core.Destroy(Gui)
-	Core.State[Gui] = nil
-	Gui:Destroy()
 end
 
 local GUI = Core.Create()
@@ -5036,7 +5001,6 @@ Components.Dialog = (function()
 			NewDialog.Scale.Scale = Value
 		end)
 
-		-- kiểu Fancy: không scale (scale làm chữ bị méo/nhảy dòng), chỉ trượt nhẹ + fade
 		local SlideMotor = Flipper.SingleMotor.new(10)
 		SlideMotor:onStep(function(Value)
 			if NewDialog.Root then
@@ -7085,7 +7049,6 @@ Components.Window = (function()
 			local FOOTER = 58
 
 			Dialog.Scale.Scale = 1
-			-- bỏ nền phụ + đường kẻ của footer
 			Dialog.ButtonHolderFrame.BackgroundTransparency = 1
 			for _, Child in next, Dialog.ButtonHolderFrame:GetChildren() do
 				if Child:IsA("Frame") and Child ~= Dialog.ButtonHolder then
@@ -7098,7 +7061,6 @@ Components.Window = (function()
 			Dialog.ButtonHolder.UIListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 			Dialog.ButtonHolder.UIListLayout.Padding = UDim.new(0, 8)
 
-			-- accent (theme) hoặc đỏ (Danger)
 			local function Tint(Props, Key)
 				if IsDanger then
 					Props[Key] = DangerColor
@@ -7122,7 +7084,6 @@ Components.Window = (function()
 					New("UIStroke", Tint({ Thickness = 1, Transparency = 0.6 }, "Color")),
 				})
 
-				-- tìm icon, không có thì thử icon dự phòng
 				local Resolved
 				for _, Name in ipairs({ IconName, "log-out", "x" }) do
 					if Library:GetIcon(Name) then
@@ -7156,7 +7117,6 @@ Components.Window = (function()
 					}, "TextColor3"))
 				end
 
-				-- vòng sóng lan ra 1 lần khi mở
 				local RingStroke = New("UIStroke", Tint({ Thickness = 2, Transparency = 0.45 }, "Color"))
 				local Ring = New("Frame", {
 					AnchorPoint = Vector2.new(0.5, 0.5),
@@ -7227,7 +7187,6 @@ Components.Window = (function()
 			local maxWidth = math.max(280, math.min(400, Window.Size.X.Offset - 80))
 			local baseWidth = math.max(300, math.min(maxWidth, TextW * 0.75 + PAD * 2))
 
-			-- tính sẵn số dòng bằng TextService → kích thước chốt 1 lần, không nhảy 1/2 dòng
 			local function Fit()
 				if not Dialog.Root or not Dialog.Root.Parent then
 					return
@@ -7243,7 +7202,6 @@ Components.Window = (function()
 			end
 
 			Fit()
-			-- text đổi (dịch ngôn ngữ) thì tính lại
 			Creator.AddSignal(Content:GetPropertyChangedSignal("Text"), Fit)
 
 			for _, Button in next, Config.Buttons do
@@ -11799,7 +11757,6 @@ Library.PointerTypes = {
 	[Enum.UserInputType.Touch] = true,
 }
 
--- Kéo + bấm-để-thu-nhỏ dùng chung (Target là Frame hoặc function trả về Frame)
 function Library.MakeDraggable(Button, Target, Types, CanDrag)
 	local Drag = { Active = false, Moved = false }
 	Types = Types or Library.PointerTypes
@@ -11877,7 +11834,7 @@ function Library:CreateMinimizer(Config)
 	local parentGui = Library.GUI or GUI
 
 
-	if parentGui then Core.SetOrder(parentGui, 1000) end
+	if parentGui then parentGui.DisplayOrder = 1000 end
 
 
 	local isMobile = Mobile and true or false
@@ -12352,8 +12309,8 @@ function Library:Destroy()
 		Creator.Disconnect()
 
 
-		Core.Destroy(Library.GUI)
-		if StatusBar.Gui then Core.Destroy(StatusBar.Gui) StatusBar.Gui, StatusBar.Frame = nil, nil end
+		Library.GUI:Destroy()
+		if StatusBar.Gui then StatusBar.Gui:Destroy() StatusBar.Gui, StatusBar.Frame = nil, nil end
 
 
 	end

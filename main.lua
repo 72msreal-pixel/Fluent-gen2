@@ -5016,7 +5016,7 @@ Components.Dialog = (function()
 
 		function NewDialog:Open()
 			Library.DialogOpen = true
-			TintTransparency(NewDialog.Fancy and 0.45 or 0.75)
+			TintTransparency(NewDialog.Fancy and 0.55 or 0.75)
 			RootTransparency(0)
 			ScaleMotor:setGoal(Spring(1, { frequency = 5, dampingRatio = 0.72 }))
 		end
@@ -5048,7 +5048,7 @@ Components.Dialog = (function()
 						1 / NewDialog.Buttons,
 						-(((NewDialog.Buttons - 1) * 10) / NewDialog.Buttons),
 						0,
-						Fancy and 38 or 32
+						Fancy and 34 or 32
 					)
 				end
 			end
@@ -5078,7 +5078,7 @@ Components.Dialog = (function()
 					local Fill = New("Frame", {
 						Size = UDim2.fromScale(1, 1),
 						BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-						BackgroundTransparency = 0.08,
+						BackgroundTransparency = 0.05,
 						BorderSizePixel = 0,
 						ZIndex = 0,
 						Parent = Button.Frame,
@@ -5086,7 +5086,7 @@ Components.Dialog = (function()
 						New("UICorner", { CornerRadius = UDim.new(0, 8) }),
 						New("UIGradient", {
 							Rotation = 90,
-							Color = ColorSequence.new(Color3.fromRGB(255, 112, 112), Color3.fromRGB(222, 62, 62)),
+							Color = ColorSequence.new(Color3.fromRGB(236, 92, 96), Color3.fromRGB(200, 58, 66)),
 						}),
 					})
 					Button.Frame.BackgroundTransparency = 1
@@ -5101,12 +5101,12 @@ Components.Dialog = (function()
 					end
 					Button.Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 
-					local _, SetFill = Creator.SpringMotor(0.08, Fill, "BackgroundTransparency", true)
+					local _, SetFill = Creator.SpringMotor(0.05, Fill, "BackgroundTransparency", true)
 					Creator.AddSignal(Button.Frame.MouseEnter, function()
 						SetFill(0)
 					end)
 					Creator.AddSignal(Button.Frame.MouseLeave, function()
-						SetFill(0.08)
+						SetFill(0.05)
 					end)
 				end
 			end
@@ -7006,13 +7006,19 @@ Components.Window = (function()
 			local IconName = Config.Icon
 			local HasIcon = IconName ~= nil and IconName ~= ""
 			local IsDanger = Config.Type == "Danger"
-			local DangerColor = Color3.fromRGB(255, 92, 92)
+			local DangerColor = Color3.fromRGB(236, 92, 96)
 
-			local PAD = HasIcon and 28 or 20
+			local PAD = HasIcon and 24 or 20
 			local Align = HasIcon and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left
-			local TitleY = HasIcon and 82 or 25
-			local ContentY = HasIcon and 114 or 60
-			local FOOTER = 70
+			local TitleY = HasIcon and 64 or 25
+			local ContentY = HasIcon and 92 or 60
+			local FOOTER = 62
+
+			Dialog.ButtonHolderFrame.Size = UDim2.new(1, 0, 0, FOOTER)
+			Dialog.ButtonHolderFrame.Position = UDim2.new(0, 0, 1, -FOOTER)
+			Dialog.ButtonHolder.Size = UDim2.new(1, -32, 1, 0)
+			Dialog.ButtonHolder.UIListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+			Dialog.ButtonHolder.UIListLayout.Padding = UDim.new(0, 8)
 
 			-- accent (theme) hoặc đỏ (Danger)
 			local function Tint(Props, Key)
@@ -7026,33 +7032,16 @@ Components.Window = (function()
 			end
 
 			if HasIcon then
-				-- glow mờ phía trên
-				New("Frame", Tint({
-					Size = UDim2.new(1, 0, 0, 120),
-					BackgroundTransparency = 0,
-					BorderSizePixel = 0,
-					ZIndex = 0,
-					Parent = Dialog.Root,
-				}, "BackgroundColor3"), {
-					New("UIGradient", {
-						Rotation = 90,
-						Transparency = NumberSequence.new({
-							NumberSequenceKeypoint.new(0, 0.82),
-							NumberSequenceKeypoint.new(1, 1),
-						}),
-					}),
-				})
-
 				local Badge = New("Frame", Tint({
 					AnchorPoint = Vector2.new(0.5, 0),
-					Position = UDim2.new(0.5, 0, 0, 22),
-					Size = UDim2.fromOffset(48, 48),
-					BackgroundTransparency = 0.82,
+					Position = UDim2.new(0.5, 0, 0, 18),
+					Size = UDim2.fromOffset(40, 40),
+					BackgroundTransparency = 0.86,
 					BorderSizePixel = 0,
 					Parent = Dialog.Root,
 				}, "BackgroundColor3"), {
 					New("UICorner", { CornerRadius = UDim.new(1, 0) }),
-					New("UIStroke", Tint({ Thickness = 1.5, Transparency = 0.55 }, "Color")),
+					New("UIStroke", Tint({ Thickness = 1, Transparency = 0.6 }, "Color")),
 				})
 
 				-- tìm icon, không có thì thử icon dự phòng
@@ -7068,7 +7057,7 @@ Components.Window = (function()
 					Library:IconLabel(Resolved, Tint({
 						AnchorPoint = Vector2.new(0.5, 0.5),
 						Position = UDim2.fromScale(0.5, 0.5),
-						Size = UDim2.fromOffset(24, 24),
+						Size = UDim2.fromOffset(20, 20),
 						BackgroundTransparency = 1,
 						Parent = Badge,
 					}, "ImageColor3"))
@@ -7094,7 +7083,7 @@ Components.Window = (function()
 				local Ring = New("Frame", {
 					AnchorPoint = Vector2.new(0.5, 0.5),
 					Position = UDim2.fromScale(0.5, 0.5),
-					Size = UDim2.fromOffset(48, 48),
+					Size = UDim2.fromOffset(40, 40),
 					BackgroundTransparency = 1,
 					Parent = Badge,
 				}, {
@@ -7104,16 +7093,16 @@ Components.Window = (function()
 				task.delay(0.12, function()
 					pcall(function()
 						local Info = TweenInfo.new(0.9, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
-						TweenService:Create(Ring, Info, { Size = UDim2.fromOffset(84, 84) }):Play()
+						TweenService:Create(Ring, Info, { Size = UDim2.fromOffset(66, 66) }):Play()
 						TweenService:Create(RingStroke, Info, { Transparency = 1 }):Play()
 					end)
 				end)
 			end
 
 			Dialog.Title.TextXAlignment = Align
-			Dialog.Title.TextSize = HasIcon and 19 or 22
+			Dialog.Title.TextSize = HasIcon and 17 or 22
 			Dialog.Title.Position = HasIcon and UDim2.new(0, 0, 0, TitleY) or UDim2.fromOffset(20, TitleY)
-			Dialog.Title.Size = UDim2.new(1, HasIcon and 0 or -40, 0, 24)
+			Dialog.Title.Size = UDim2.new(1, HasIcon and 0 or -40, 0, 22)
 
 			local ContentHolder = New("ScrollingFrame", {
 				BackgroundTransparency = 1,
@@ -7124,7 +7113,7 @@ Components.Window = (function()
 				TopImage = "rbxassetid://6276641225",
 				BorderSizePixel = 0,
 				Position = UDim2.fromOffset(PAD, ContentY),
-				Size = UDim2.new(1, -PAD * 2, 1, -(ContentY + FOOTER + 16)),
+				Size = UDim2.new(1, -PAD * 2, 1, -(ContentY + FOOTER + 12)),
 				CanvasSize = UDim2.fromOffset(0, 0),
 				AutomaticCanvasSize = Enum.AutomaticSize.Y,
 				Parent = Dialog.Root,
@@ -7134,8 +7123,8 @@ Components.Window = (function()
 				FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
 				Text = Config.Content,
 				TextColor3 = Color3.fromRGB(240, 240, 240),
-				TextTransparency = 0.18,
-				TextSize = 14,
+				TextTransparency = 0.3,
+				TextSize = 13,
 				TextXAlignment = Align,
 				TextYAlignment = Enum.TextYAlignment.Top,
 				AutomaticSize = Enum.AutomaticSize.Y,
@@ -7147,29 +7136,29 @@ Components.Window = (function()
 			})
 
 			New("UISizeConstraint", {
-				MinSize = Vector2.new(300, 190),
-				MaxSize = Vector2.new(560, math.huge),
+				MinSize = Vector2.new(280, 170),
+				MaxSize = Vector2.new(460, math.huge),
 				Parent = Dialog.Root,
 			})
 
 			local TextW = 0
 			pcall(function()
 				local Plain = tostring(Config.Content or ""):gsub("<[^>]+>", "")
-				TextW = TextService:GetTextSize(Plain, 14, Enum.Font.Gotham, Vector2.new(10000, 10000)).X
+				TextW = TextService:GetTextSize(Plain, 13, Enum.Font.Gotham, Vector2.new(10000, 10000)).X
 			end)
 
-			local maxWidth = math.max(300, math.min(480, Window.Size.X.Offset - 80))
-			local baseWidth = math.max(320, math.min(maxWidth, TextW + PAD * 2 + 8))
+			local maxWidth = math.max(280, math.min(400, Window.Size.X.Offset - 80))
+			local baseWidth = math.max(300, math.min(maxWidth, TextW * 0.75 + PAD * 2))
 
 			local function Fit()
 				if not Dialog.Root or not Dialog.Root.Parent then
 					return
 				end
-				local H = ContentY + Content.TextBounds.Y + 20 + FOOTER
-				Dialog.Root.Size = UDim2.fromOffset(baseWidth, math.clamp(H, 190, 440))
+				local H = ContentY + Content.TextBounds.Y + 16 + FOOTER
+				Dialog.Root.Size = UDim2.fromOffset(baseWidth, math.clamp(H, 170, 400))
 			end
 
-			Dialog.Root.Size = UDim2.fromOffset(baseWidth, 190)
+			Dialog.Root.Size = UDim2.fromOffset(baseWidth, 170)
 			task.defer(Fit)
 			-- text đổi (dịch ngôn ngữ) thì tự co giãn lại
 			Creator.AddSignal(Content:GetPropertyChangedSignal("TextBounds"), Fit)

@@ -7068,8 +7068,9 @@ Components.Window = (function()
 
 			local PAD = HasIcon and 24 or 20
 			local Align = HasIcon and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left
-			local TitleY = HasIcon and 64 or 20
-			local ContentY = HasIcon and 100 or 58
+			local TitleY = HasIcon and 64 or 14
+			local ContentY = HasIcon and 100 or 48
+			local MinH = HasIcon and 140 or 110
 			local FOOTER = 58
 
 			Dialog.Scale.Scale = 1
@@ -7207,7 +7208,7 @@ Components.Window = (function()
 			})
 
 			New("UISizeConstraint", {
-				MinSize = Vector2.new(280, 140),
+				MinSize = Vector2.new(280, MinH),
 				MaxSize = Vector2.new(460, math.huge),
 				Parent = Dialog.Root,
 			})
@@ -7232,7 +7233,7 @@ Components.Window = (function()
 					H = math.ceil(TextService:GetTextSize(Plain, 13, Enum.Font.Gotham, Vector2.new(WrapW, 10000)).Y)
 				end)
 				Content.Size = UDim2.new(1, -6, 0, H)
-				Dialog.Root.Size = UDim2.fromOffset(baseWidth, math.clamp(ContentY + H + 14 + FOOTER, 140, 400))
+				Dialog.Root.Size = UDim2.fromOffset(baseWidth, math.clamp(ContentY + H + 14 + FOOTER, MinH, 400))
 			end
 
 			Fit()

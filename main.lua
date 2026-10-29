@@ -765,7 +765,7 @@ local Themes = {
 }
 
 local Library = {
-	Version = "1.5.8",
+	Version = "1.6.0",
 
 	OpenFrames = {},
 	Options = {},
@@ -3884,7 +3884,6 @@ Components.Section = (function()
 			return New("TextLabel", Props)
 		end
 
-		-- Icon nam o giua (doc) khoi title + desc, title/desc thang hang ben phai icon (kieu WindUI)
 		local TextColumn = New("Frame", {
 			Size = HasDesc and UDim2.new(1, Icon and -(IconSize + 5) or 0, 1, 0) or UDim2.fromScale(0, 1),
 			AutomaticSize = HasDesc and Enum.AutomaticSize.None or Enum.AutomaticSize.X,
@@ -5137,7 +5136,6 @@ Components.Dialog = (function()
 						New("UICorner", { CornerRadius = UDim.new(0, 8) }),
 						New("UIGradient", {
 							Rotation = 90,
-							-- đỏ trầm hơn, bớt chói để hợp nền tối của UI
 							Color = ColorSequence.new(Color3.fromRGB(205, 70, 78), Color3.fromRGB(164, 46, 54)),
 						}),
 						New("UIStroke", {
@@ -5166,8 +5164,6 @@ Components.Dialog = (function()
 						SetFill(0.05)
 					end)
 				else
-					-- Nút phụ (Cancel...): nền/viền lấy từ màu "Text" + độ mờ,
-					-- luôn tương phản với nền dialog ở bất kỳ theme nào
 					local Stroke = Button.Frame:FindFirstChildOfClass("UIStroke")
 					for Obj, Prop in next, {
 						[Button.Frame] = "BackgroundColor3",
@@ -5278,7 +5274,6 @@ Components.Notification = (function()
 			ThemeTag = { TextColor3 = "SubText" },
 		})
 
-		-- Cot chu nam ben phai icon: title o tren, content/subcontent ngay duoi, cung thang hang
 		NewNotification.LabelHolder = New("Frame", {
 			AutomaticSize = Enum.AutomaticSize.Y,
 			BackgroundTransparency = 1,
@@ -7068,8 +7063,6 @@ Components.Window = (function()
 			Dialog.Title.Text = Config.Title
 			Dialog.Root.UICorner.CornerRadius = UDim.new(0, 12)
 
-			-- Nền popup lấy đúng bề mặt của cửa sổ chính (AcrylicMain + AcrylicGradient)
-			-- thay vì tag "Dialog" riêng, để không bị lệch tông ở bất kỳ theme nào.
 			Creator.OverrideTag(Dialog.Root, { BackgroundColor3 = "AcrylicMain" })
 			New("Frame", {
 				BackgroundColor3 = Color3.fromRGB(255, 255, 255),
@@ -12374,9 +12367,6 @@ end
 
 
 
-
-
--- Chỉ bật DepthOfField toàn màn hình khi UI đang hiện + Acrylic bật; ẩn/tắt/unload thì gỡ ra
 function Library:SyncAcrylic()
 	if Acrylic.Enable then
 		local On = Library.UseAcrylic and Library.Acrylic and Library.Window and not Library.Window.Minimized and not Library.Unloaded

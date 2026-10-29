@@ -3871,7 +3871,7 @@ Components.Section = (function()
 			})
 		end
 
-		local IconSize = HasDesc and 20 or 16
+		local IconSize = 16
 		local AlignName = typeof(Config.TextXAlignment) == "EnumItem" and Config.TextXAlignment.Name or Config.TextXAlignment
 		local TextAlign = (AlignName == "Center" and Enum.TextXAlignment.Center)
 			or (AlignName == "Right" and Enum.TextXAlignment.Right)
@@ -3886,7 +3886,7 @@ Components.Section = (function()
 
 		-- Icon nam o giua (doc) khoi title + desc, title/desc thang hang ben phai icon (kieu WindUI)
 		local TextColumn = New("Frame", {
-			Size = HasDesc and UDim2.new(1, Icon and -(IconSize + 6) or 0, 1, 0) or UDim2.fromScale(0, 1),
+			Size = HasDesc and UDim2.new(1, Icon and -(IconSize + 5) or 0, 1, 0) or UDim2.fromScale(0, 1),
 			AutomaticSize = HasDesc and Enum.AutomaticSize.None or Enum.AutomaticSize.X,
 			BackgroundTransparency = 1,
 			LayoutOrder = 2,
@@ -3932,7 +3932,7 @@ Components.Section = (function()
 			BackgroundTransparency = 1,
 		}, {
 			New("UIListLayout", {
-				Padding = UDim.new(0, 6),
+				Padding = UDim.new(0, 5),
 				FillDirection = Enum.FillDirection.Horizontal,
 				SortOrder = Enum.SortOrder.LayoutOrder,
 				VerticalAlignment = Enum.VerticalAlignment.Center,
@@ -5214,8 +5214,8 @@ Components.Notification = (function()
 		NewNotification.AcrylicPaint = Acrylic.AcrylicPaint()
 
 		local HasIcon = Config.Icon ~= nil and Config.Icon ~= ""
-		local PAD, ICON = 14, 24
-		local TextX = HasIcon and (PAD + ICON + 10) or PAD
+		local PAD, ICON = 14, 18
+		local TextX = HasIcon and (PAD + ICON + 6) or PAD
 		local GothamFont = "rbxasset://fonts/families/GothamSSm.json"
 
 		local function Text(Value, Props)
@@ -5232,8 +5232,7 @@ Components.Notification = (function()
 
 		NewNotification.Title = Text(Config.Title, {
 			RichText = true,
-			TextSize = 15,
-			FontFace = Font.new(GothamFont, Enum.FontWeight.SemiBold),
+			TextSize = 13,
 			Size = UDim2.new(1, -26, 0, 0),
 			LayoutOrder = 1,
 			ThemeTag = { TextColor3 = "Text" },
@@ -5260,7 +5259,7 @@ Components.Notification = (function()
 		}, {
 			New("UIListLayout", {
 				SortOrder = Enum.SortOrder.LayoutOrder,
-				Padding = UDim.new(0, 4),
+				Padding = UDim.new(0, 3),
 			}),
 			NewNotification.Title,
 			NewNotification.ContentLabel,

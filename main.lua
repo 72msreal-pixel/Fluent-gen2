@@ -3871,7 +3871,7 @@ Components.Section = (function()
 			})
 		end
 
-		local IconSize = 16
+		local IconSize = HasDesc and 20 or 16
 		local AlignName = typeof(Config.TextXAlignment) == "EnumItem" and Config.TextXAlignment.Name or Config.TextXAlignment
 		local TextAlign = (AlignName == "Center" and Enum.TextXAlignment.Center)
 			or (AlignName == "Right" and Enum.TextXAlignment.Right)
@@ -5214,7 +5214,8 @@ Components.Notification = (function()
 		NewNotification.AcrylicPaint = Acrylic.AcrylicPaint()
 
 		local HasIcon = Config.Icon ~= nil and Config.Icon ~= ""
-		local PAD, ICON = 14, 18
+		local PAD = 14
+		local ICON = (Config.Content ~= "" or Config.SubContent ~= "") and 24 or 18
 		local TextX = HasIcon and (PAD + ICON + 6) or PAD
 		local GothamFont = "rbxasset://fonts/families/GothamSSm.json"
 

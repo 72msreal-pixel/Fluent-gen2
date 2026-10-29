@@ -3871,7 +3871,7 @@ Components.Section = (function()
 			})
 		end
 
-		local IconSize = HasDesc and 20 or 16
+		local IconSize = HasDesc and 24 or 16
 		local AlignName = typeof(Config.TextXAlignment) == "EnumItem" and Config.TextXAlignment.Name or Config.TextXAlignment
 		local TextAlign = (AlignName == "Center" and Enum.TextXAlignment.Center)
 			or (AlignName == "Right" and Enum.TextXAlignment.Right)

@@ -5137,7 +5137,13 @@ Components.Dialog = (function()
 						New("UICorner", { CornerRadius = UDim.new(0, 8) }),
 						New("UIGradient", {
 							Rotation = 90,
-							Color = ColorSequence.new(Color3.fromRGB(236, 92, 96), Color3.fromRGB(200, 58, 66)),
+							-- đỏ trầm hơn, bớt chói để hợp nền tối của UI
+							Color = ColorSequence.new(Color3.fromRGB(205, 70, 78), Color3.fromRGB(164, 46, 54)),
+						}),
+						New("UIStroke", {
+							ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+							Color = Color3.fromRGB(255, 130, 136),
+							Transparency = 0.75,
 						}),
 					})
 					Button.Frame.BackgroundTransparency = 1
@@ -5701,7 +5707,7 @@ Components.TitleBar = (function()
 				Content = "Are you sure you want to unload the interface?",
 				Buttons = {
 					{
-						Title = "Continute",
+						Title = "Continue",
 						Style = "Danger",
 						Callback = function()
 							Library:Destroy()
@@ -7062,6 +7068,28 @@ Components.Window = (function()
 			Dialog.Title.Text = Config.Title
 			Dialog.Root.UICorner.CornerRadius = UDim.new(0, 12)
 
+			-- Nền popup lấy đúng bề mặt của cửa sổ chính (AcrylicMain + AcrylicGradient)
+			-- thay vì tag "Dialog" riêng, để không bị lệch tông ở bất kỳ theme nào.
+			Creator.OverrideTag(Dialog.Root, { BackgroundColor3 = "AcrylicMain" })
+			New("Frame", {
+				BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+				BackgroundTransparency = 0.1,
+				BorderSizePixel = 0,
+				Size = UDim2.fromScale(1, 1),
+				ZIndex = 0,
+				Parent = Dialog.Root,
+			}, {
+				New("UIGradient", {
+					Rotation = 90,
+					ThemeTag = { Color = "AcrylicGradient" },
+				}),
+			})
+			local RootStroke = Dialog.Root:FindFirstChildOfClass("UIStroke")
+			if RootStroke then
+				Creator.OverrideTag(RootStroke, { Color = "AcrylicBorder" })
+				RootStroke.Transparency = 0.35
+			end
+
 			local IconName = Config.Icon
 			local HasIcon = IconName ~= nil and IconName ~= ""
 			local IsDanger = Config.Type == "Danger"
@@ -7078,7 +7106,9 @@ Components.Window = (function()
 			Dialog.ButtonHolderFrame.BackgroundTransparency = 1
 			for _, Child in next, Dialog.ButtonHolderFrame:GetChildren() do
 				if Child:IsA("Frame") and Child ~= Dialog.ButtonHolder then
-					Child.Visible = false
+					-- Giữ đường kẻ mảnh ngăn footer, cùng màu với đường kẻ title bar
+					Creator.OverrideTag(Child, { BackgroundColor3 = "TitleBarLine" })
+					Child.BackgroundTransparency = 0.5
 				end
 			end
 			Dialog.ButtonHolderFrame.Size = UDim2.new(1, 0, 0, FOOTER)

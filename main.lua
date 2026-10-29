@@ -5159,6 +5159,27 @@ Components.Dialog = (function()
 					Creator.AddSignal(Button.Frame.MouseLeave, function()
 						SetFill(0.05)
 					end)
+				else
+					-- Nút phụ (Cancel...): nền/viền lấy từ màu "Text" + độ mờ,
+					-- luôn tương phản với nền dialog ở bất kỳ theme nào
+					local Stroke = Button.Frame:FindFirstChildOfClass("UIStroke")
+					for Obj, Prop in next, {
+						[Button.Frame] = "BackgroundColor3",
+						[Button.HoverFrame] = "BackgroundColor3",
+						[Stroke] = "Color",
+					} do
+						Creator.OverrideTag(Obj, { [Prop] = "Text" })
+					end
+					Stroke.Transparency = 0.78
+					Button.Frame.BackgroundTransparency = 0.94
+
+					local _, SetBg = Creator.SpringMotor(0.94, Button.Frame, "BackgroundTransparency", true)
+					Creator.AddSignal(Button.Frame.MouseEnter, function()
+						SetBg(0.86)
+					end)
+					Creator.AddSignal(Button.Frame.MouseLeave, function()
+						SetBg(0.94)
+					end)
 				end
 			end
 
@@ -7048,7 +7069,7 @@ Components.Window = (function()
 			local PAD = HasIcon and 24 or 20
 			local Align = HasIcon and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left
 			local TitleY = HasIcon and 64 or 20
-			local ContentY = HasIcon and 92 or 54
+			local ContentY = HasIcon and 100 or 58
 			local FOOTER = 58
 
 			Dialog.Scale.Scale = 1
@@ -7144,6 +7165,16 @@ Components.Window = (function()
 			Dialog.Title.TextSize = HasIcon and 17 or 20
 			Dialog.Title.Position = HasIcon and UDim2.new(0, 0, 0, TitleY) or UDim2.fromOffset(PAD, TitleY)
 			Dialog.Title.Size = UDim2.new(1, HasIcon and 0 or -PAD * 2, 0, 24)
+
+			-- Đường kẻ dưới tiêu đề (dùng màu "Text" mờ nên hợp mọi theme)
+			New("Frame", {
+				Position = UDim2.new(0, 0, 0, ContentY - 8),
+				Size = UDim2.new(1, 0, 0, 1),
+				BackgroundTransparency = 0.88,
+				BorderSizePixel = 0,
+				Parent = Dialog.Root,
+				ThemeTag = { BackgroundColor3 = "Text" },
+			})
 
 			local ContentHolder = New("ScrollingFrame", {
 				BackgroundTransparency = 1,

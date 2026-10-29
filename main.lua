@@ -3524,7 +3524,7 @@ local Components = {
 	Assets = {
 		Close = "x",
 		Min = "minus",
-		Max = "rbxassetid://9886659406",
+		Max = "square",
 		Restore = "rbxassetid://9886659001",
 	},
 }
